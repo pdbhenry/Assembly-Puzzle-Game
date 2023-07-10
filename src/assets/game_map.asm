@@ -232,6 +232,17 @@ level_18_mini_map_data:
 	DB $0, $0, $0, $0, $24,$27,$10,$1C,$0, $0
 	DB $0, $0, $24,$10,$0, $0, $0, $0, $0, $0
 	
+level_19_mini_map_data:
+	DB $0, $0, $0, $0, $0, $0, $0, $0, $0, $0
+	DB $0, $0, $0, $0, $0, $0, $0, $0, $0, $0
+	DB $0, $0, $0, $10,$0, $0, $0, $0, $0, $0
+	DB $0, $0, $0, $10,$0, $0, $0, $0, $0, $0
+	DB $27,$10,$0, $24,$0, $0, $0, $0, $0, $0
+	DB $10,$0, $0, $0, $0, $0, $0, $0, $0, $0
+	DB $10,$0, $27,$10,$0, $27,$0, $10,$0, $0
+	DB $10,$0, $10,$0, $0, $10,$0 ,$10,$0, $0
+	DB $0, $0, $0, $0, $0, $0, $0, $0, $0, $0
+	
 game_tile_data::
 	DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
 	DB $FE,$FF,$FE,$FF,$FE,$FF,$F6,$FF,$FE,$FF,$FE,$FF,$FE,$FF,$FE,$FF
@@ -319,10 +330,10 @@ game_tile_data_end::
 ;Left-most nibble is x position, right-most is y position. Each new byte is for the next level
 ;x,y pos is based on a 9x8 screen of 16x16 tiles
 game_start_pos::
-	DB $35,$48,$08,$08,$06,$38,$17,$28,$08,$04,$65,$88,$28,$03,$55,$28,$28,$03,$08
+	DB $35,$48,$08,$08,$06,$38,$17,$28,$08,$04,$65,$88,$28,$03,$55,$28,$28,$03,$08,$08
 
 level_powers::
-	DB $00,$00,$00,$00,$00,$00,$00,$01,$00,$00,$01,$07,$00,$00,$00,$00,$00,$00,$00
+	DB $00,$00,$00,$00,$00,$00,$00,$01,$00,$00,$01,$07,$00,$00,$00,$00,$00,$00,$00,$00
 
 ;Details the songs that accompany stretches of levels. From 0-2, its eerie (Song 0). From 3 onward, it's suit up (Song 1)
 ;Song #, Level #, Song #, Level #, Song #,..., $FF
@@ -336,14 +347,14 @@ level_map_addrs::
 	DW level_9_mini_map_data, level_10_mini_map_data, level_11_mini_map_data
 	DW level_12_mini_map_data, level_13_mini_map_data, level_14_mini_map_data
 	DW level_15_mini_map_data, level_16_mini_map_data, level_17_mini_map_data
-	DW level_18_mini_map_data
+	DW level_18_mini_map_data, level_19_mini_map_data
 	
 level_names::
 	DW level_0_name, level_1_name, level_2_name, level_3_name
 	DW level_4_name, level_5_name, level_6_name, level_7_name
 	DW level_8_name, level_9_name, level_10_name, level_11_name
 	DW level_12_name, level_13_name, level_14_name, level_15_name
-	DW level_16_name, level_17_name, level_18_name, 255, 255
+	DW level_16_name, level_17_name, level_18_name, level_19_name, 255, 255
 	
 level_0_name:
 	DB "  A STRANGE BOX   ",255
@@ -370,16 +381,18 @@ level_10_name:
 level_11_name:
 	DB "    LOOSE TEST    ",255
 level_12_name:
-	DB "PRINT    ",255
+	DB "PRINT             ",255
 level_13_name:
-	DB "SEQUENCE ",255
+	DB "SEQUENCE          ",255
 level_14_name:
-	DB "FORBIDDEN ",255
+	DB "FORBIDDEN         ",255
 level_15_name:
-	DB "PUNCH OUT ",255
+	DB "PUNCH OUT         ",255
 level_16_name:
-	DB "MECHANISM ",255
+	DB "MECHANISM         ",255
 level_17_name:
-	DB "RAMP ",255
+	DB "RAMP              ",255
 level_18_name:
-	DB "RAMP UP ",255
+	DB "RAMP UP           ",255
+level_19_name:
+	DB "UPRIGHT           ",255

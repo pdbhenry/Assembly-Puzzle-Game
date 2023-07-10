@@ -30,6 +30,7 @@ block_palette:: DB
 palette_map_addr_lo:: DB	;High byte will be static $D1. Only lo changes
 palette_map_addr_2:: DS 90
 ori_changed:: DB 			;Set when orientation was changed last frame
+push_tile:: DB				;Just stores tile we're looking at currently during a check_block_push loop
 block_push_addr_hi:: DB		;For block push anim. Holds addr of tile that was last shifted.
 block_push_addr_lo:: DB		;This addr is so the second half of the anim knows where we left off.
 block_push_next_line:: DB	;Holds val that brings us to the next row/col of tiles (u/d/l/r)
@@ -89,7 +90,24 @@ open_slide_spot:: DB		;Gives the low byte of C1XX addr of first
 ongoing_slides:: DB			;Val of how many lines of ice are sliding simultaneously
 slides_count:: DB			;# of lines of ice we have yet to process.
 curr_slide_spot:: DB
-ice_slide_space::
+ice_slide_space:: DB 		;Probably needs to be DS <big number>
+
+ramping_blocks_ind:: DB		;Holds index for array below (array currently supports up to 5 blocks (9 bytes * 5))
+push_origins_ind:: DB		;Ind for arr below. push_origins allows multiple pushes in one frame
+total_segs_pushed:: DB		;Ind for arr below
+curr_push:: DB				;Holds curr ind of push we're processing
+turn_switch:: DB			;If nz, we have turned and are checking if a block is right after that turn.
+
+ramping_blocks:: DS 45		;Holds data of blocks that will be shifted by ramps (orig pos, new pos, pal, tiles)
+push_origins:: DS 15			;Holds the map addr of first block in a push. Also holds the next/adj tile vals.
+blocks_pushed_arr:: DS 5	;Holds the # of blocks pushed for each push happening
+uncovered_blocks:: DS 10	;Holds addrs of header in block_tiles.inc for 
+
+block_push_addr:: DS 10		;For block push anim. Holds addr of tile that was last shifted.
+next_line_arr:: DS 5
+adj_tile_arr:: DS 5
+		
+		
 SECTION "game", ROM0
 
 include "include/gb/constants.inc"
@@ -407,14 +425,36 @@ moving_step_check_3:
 	jp nz, moving_step_check_4		
 	ld hl, $0100
 	call change_sprite
-	ld a, [block_push_addr_hi]		;Using block_push_addr_hi as a way to tell
+	ld a, [total_segs_pushed]		;Using total_segs_pushed as a way to tell
 	or a							;if we're in the middle of pushing
-	jp z, moving_step_push_end_2;		end_frame		;ret z							;!!!
+	jp z, moving_step_push_end;		end_frame		;ret z							;!!!
 ;------------------FINISHING BLOCK PUSH ANIM---------------------------------
+
+	xor a
+	ld [curr_push], a
+	
+finish_block_push_loop:
+	ld b, a
+	ld a, [total_segs_pushed]
+	cp b
+	jp z, moving_step_push_end
+	
+	ld a, [curr_push]
+	sla a							;curr_push x 2, block_push_addr stores 2-byte addrs at a time
+	ld de, block_push_addr
+	add e
+	ld e, a
+	ld a, [de]
 	ld h, a
-	ld a, [block_push_addr_lo]
+	inc e
+	ld a, [de]
 	ld l, a
-	ld a, [block_push_next_line]
+	
+	ld a, [curr_push]
+	ld de, next_line_arr
+	add e
+	ld e, a
+	ld a, [de]
 	ld b, 0
 	cp $E0							;In case b is a negative number
 	jr c, moving_step_push
@@ -423,18 +463,29 @@ moving_step_push:
 	ld c, a
 	add hl, bc						;Move hl forward one tile
 	ld b, a
-	ld a, [block_push_adj_tile]
+	
+	ld a, [curr_push]
+	ld de, adj_tile_arr
+	add e
+	ld e, a
+	ld a, [de]
 	ld c, a
 	
 	ld a, [blocks_pushed_2]
 	cp 2							;If blocks_pushed_2 is <default val of 2, 
-	jp c, moving_step_push_end_2	;we're just pushing ice and this anim is not needed
+	jp c, moving_step_push_end		;we're just pushing ice and this anim is not needed
 	ld [blocks_pushed], a
 	
-	ld a, [uncovered_block_hi]
-	ld d, a
-	ld a, [uncovered_block_lo]
-	ld e, a
+	push hl
+		ld a, [curr_push]
+		sla a						;curr_push * 2, uncovered_blocks has 2-byte units
+		ld hl, uncovered_blocks
+		add l
+		ld l, a
+		ldi a, [hl]
+		ld d, a
+		ld e, [hl]
+	pop hl
 	
 	;Start tile_1/tile_2 off as top-left/top-right tiles
 	ld a, [de]
@@ -444,9 +495,15 @@ moving_step_push:
 	ld [tile_2], a
 	
 	xor a							;!!! A potential fix to storing pal from
-	ld [block_palette], a			;!!! first 8pixel push
+	ld [block_palette], a			;!!! first 8 pixel push
 	
-	ld a, [block_push_next_line]
+	push bc
+		ld a, [curr_push]
+		ld bc, next_line_arr
+		add c
+		ld c, a 
+		ld a, [bc]
+	pop bc
 	cp 32							;If push is down
 	jr nz, moving_step_push_left
 
@@ -456,7 +513,7 @@ moving_step_push:
 	inc de
 	ld a, [de]						;Bottom-right
 	ld [tile_2], a
-	jr moving_step_push_end
+	jr moving_step_push_block
 moving_step_push_left:
 	cp $FF							;If push is left (-1)
 	jr nz, moving_step_push_right
@@ -464,10 +521,10 @@ moving_step_push_left:
 	inc de
 	ld a, [de]						;Bottom-left
 	ld [tile_2], a					;Set tile_2 to bg tile 2
-	jr moving_step_push_end
+	jr moving_step_push_block
 moving_step_push_right:				;***Currently no different from left
 	cp 1							;If push is right
-	jr nz, moving_step_push_end		;Else, it's up and we have those vals loaded
+	jr nz, moving_step_push_block		;Else, it's up and we have those vals loaded
 	
 	ld a, [de]						;Top-right
 	ld [tile_1], a
@@ -476,11 +533,17 @@ moving_step_push_right:				;***Currently no different from left
 	ld a, [de]						;Bottom-right
 	ld [tile_2], a					;Set tile_2 to bg tile 2
 	
-moving_step_push_end:
+moving_step_push_block:
 	call block_push_loop
+	ld a, [curr_push]
+	inc a
+	ld [curr_push], a
+	jp finish_block_push_loop
+	
+moving_step_push_end:
 	xor a
-	ld [block_push_addr_hi], a
-moving_step_push_end_2:
+	ld [total_segs_pushed], a
+	
 	ld b, 0				;To signal we are mid push for get_uncovered_tiles
 	call moving_step_stick
 	jp z, moving_step_push_end_4
@@ -513,6 +576,8 @@ moving_step_check_4:
 	call create_earth_anim			
 	jp end_frame
 	
+	
+;---------------------------END OF MOVE---------------------------------
 moving_step_check_5:
 	or a							;!!!CP 0, END OF MOVE
 	jp nz, end_frame	;ret nz							;!!!
@@ -927,9 +992,9 @@ reset_ice_and_move:
 	jr nz, rocketing_check_3
 
 reset_move:
+	xor a
+	ld [total_segs_pushed], a
 	call reset_player_pos
-	;xor a
-	;ld [earth_casting], a
 	jp finish_move
 	
 reset_player_pos:
@@ -964,7 +1029,7 @@ moving_check_above:
 	ld a, -1
 	ld [move_xy+1], a
 	ld a, RAMP_TL_TILE
-	ld [rampable_3], a					;rampable_3 holds tile vale for ramp that, if jumped into,
+	ld [rampable_3], a					;rampable_3 holds tile val for ramp that, if jumped into,
 	ld a, RAMP_TR_TILE					;push Sirloin in a positive direction.
 	ld [rampable_4], a					;rampable_4 is for ramp that pushes in the negative direction
 	ld a, $2						
@@ -1111,274 +1176,482 @@ moving_check_above_3_no_ice:
 	jp begin_move
 	
 moving_check_above_ramp:
-	ld d, a							;!!!Hopefully we don't need what's in d
-	ld a, [rampable_3]
-	cp d
-	jr nz, moving_check_above_ramp_2
+;	ld d, a							;!!!Hopefully we don't need what's in d
+;	ld a, [rampable_3]
+;	cp d
+;	jr nz, moving_check_above_ramp_2
 	
-	ld a, c
-	ld bc, 64						;If hitting rampable_3, our push is in a pos dir. Originally setting it to 64
-	bit 1, a
-	jr nz, .hor
-	ld bc, 2						;If our jump's dir's abs val is 64 (vert), our push will be pos 2 (hor).
+;	ld a, c
+;	ld bc, 64						;If hitting rampable_3, our push is in a pos dir. Originally setting it to 64
+;	bit 1, a
+;	jr nz, .hor
+;	ld bc, 2						;If our jump's dir's abs val is 64 (vert), our push will be pos 2 (hor).
 	
-.hor:
-	ld a, [ramp_front]
-	add l
-	ld l, a
-	jr nc, .nc
-	inc h
-.nc:
-	ld a, 1							;Value we are changing in non-gravity axis.
-	jr moving_check_above_end_ramp
+;.hor:
+;	ld a, [ramp_front]
+;	add l
+;	ld l, a
+;	jr nc, .nc
+;	inc h
+;.nc:
+;	ld a, 1							;Value we are changing in non-gravity axis.
+;	jr moving_check_above_end_ramp
 
-moving_check_above_ramp_2:
-	ld a, [rampable_4]
-	cp d
-	jr nz, moving_check_above_4
-	
-	ld a, c
-	ld bc, -64						;If hitting rampable_4, our push is in a neg dir. Originally setting it to -64
-	bit 1, a
-	jr nz, .hor
-	ld bc, -2						;If our jump's dir's abs val is 64 (vert), our push will be neg 2 (hor).
+;moving_check_above_ramp_2:
+;	ld a, [rampable_4]
+;	cp d
+;	jr nz, moving_check_above_4
+;	
+;	ld a, c
+;	ld bc, -64						;If hitting rampable_4, our push is in a neg dir. Originally setting it to -64
+;	bit 1, a
+;	jr nz, .hor
+;	ld bc, -2						;If our jump's dir's abs val is 64 (vert), our push will be neg 2 (hor).
 
-.hor:
-	ld a, [ramp_front]
-	ld d, a
-	ld a, l
-	sub d
-	ld l, a
-	jr nc, .nc_2
-	dec h	
-.nc_2:
-	ld a, -1
+;.hor:
+;	ld a, [ramp_front]
+;	ld d, a
+;	ld a, l
+;	sub d
+;	ld l, a
+;	jr nc, .nc_2
+;	dec h	
+;.nc_2:
+;	ld a, -1
 	
-moving_check_above_end_ramp:
-	ld d, a
+;moving_check_above_end_ramp:
+;	ld d, a
 	;call lcd_wait
 	;ld a, [hl]
 	;cp IMPASSABLE_TILE
 	;jp z, reset_move				;If non-passable block is in front of ramp, don't ramp down
 	
-	ld a, [move_xy]					;Find which move is 0 (x or y)
-	or a
-	ld a, d
-	jr nz, .move_y
-	ld [move_xy], a
-	jr .end
+;	ld a, [move_xy]					;Find which move is 0 (x or y)
+;	or a
+;	ld a, d
+;	jr nz, .move_y
+;	ld [move_xy], a
+;	jr .end
 
-.move_y:
-	ld [move_xy+1], a
+;.move_y:
+;	ld [move_xy+1], a
 	
-.end:
-	call use_ramp
+;.end:
+;	call use_ramp
 
-	ld d, 0	
-	jp moving_check_above_2
+;	ld d, 0	
+;	jp moving_check_above_2
 	
 	;jp begin_move
 	
 moving_check_above_4:
-	push hl							;Store jumped to block
+	ld de, push_origins				;We load the starting position and the direction
+	ld a, h
+	ld [de], a
+	inc e
+	ld a, l
+	ld [de], a
+	inc e
+	ld a, b
+	ld [de], a
+	inc e
+	ld a, c
+	ld [de], a
+	
+	ld a, 4
+	ld [push_origins_ind], a
+	
+	;push hl							;Store jumped to block
 	;ld d, h
 	;ld e, l
 	
-		ld a, 2							;Default is 2
-		ld [blocks_pushed], a
+	ld a, 2							;Default is 2
+	ld [blocks_pushed], a
+	dec a
+	ld [total_segs_pushed], a		;Default segs is 1
+	
+check_block_push:					;CHECKING BOUNDS
+	add hl, bc					
+	ld a, h
+	cp $9c						;If h is below 9c, blocks are pushed 
+	jp c, reset_ice_and_move			;against bounds. Not valid push
+	cp $9e
+	jr nz, check_block_push_2
+	ld a, l
+	cp $13
+	jp nc, reset_ice_and_move			;If hl is 9e13 or above, not valid push
 		
-check_block_push:
-		add hl, bc
-		ld a, h
-		cp $9c						;If h is below 9c, blocks are pushed 
-		jp c, reset_ice_and_move			;against bounds. Not valid push
-		cp $9e
-		jr nz, check_block_push_2
+check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
+	call lcd_wait
+	ld a, [hl]
+	ld [push_tile], a
+	cp $FF
+	jp z, reset_ice_and_move			;If [hl] is ff, we're out of horizontal bounds
+	cp TRUE_PASSABLE_TILE
+	jp c, start_block_push				;If we've pushed >=1 blocks and now find a bg tile, start push
+	
+	ld a, [turn_switch]					;If we have turned and there's a block after the turn, that means
+	or a								;we have another segment to push.
+	jr z, .check_ramp
+	
+	ld a, [total_segs_pushed]
+	inc a
+	ld [total_segs_pushed], a
+	xor a
+	ld [turn_switch], a
+	
+.check_ramp:
+	ld a, [rampable_3]
+	ld d, a
+	ld a, [rampable_4]
+	ld e, a
+	ld a, [push_tile]
+	
+	cp d								;If a==d, we are ramping in a positive direction
+	jr nz, .check_neg_ramp
+
+	ld a, RAMP_BR_TILE					;Setting ramps that would turn a block in the new direction we're headed
+	ld [rampable_4], a
+	
+	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
+	jr z, .pos_ramp_64					;turning right by ramp (since we know we're ramping positively)
+;
+	ld de, 64							;If jumping right/left, we are turing down since we're ramping
+	ld a, RAMP_BL_TILE					;positively
+	ld [rampable_3], a
+	jr .store_turning_block
+		
+.pos_ramp_64:
+	ld de, 2
+	ld a, RAMP_TR_TILE
+	ld [rampable_3], a
+	jr .store_turning_block
+		
+.check_neg_ramp:
+	cp e
+	jr nz, .check_ice
+	
+	ld a, RAMP_TL_TILE
+	ld [rampable_3], a
+
+	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
+	jr z, .neg_ramp_64					;turning right by ramp (since we know we're ramping positively)
+;
+	ld de, -64							;If jumping right/left, we are turing down since we're ramping positively
+	ld a, RAMP_TR_TILE
+	ld [rampable_4], a
+	jr .store_turning_block
+		
+.neg_ramp_64:
+	ld de, -2
+	ld a, RAMP_BL_TILE
+	ld [rampable_4], a
+	
+.store_turning_block:
+	push hl
+		ld a, b
+		cpl
+		ld b, a
+		ld a, c
+		cpl
+		inc a
+		ld c, a
+		add hl, bc				;Get position of block being pushed into the ramp
+
+		ld bc, ramping_blocks
+		ld a, [ramping_blocks_ind]
+		add c
+		ld c, a
+		
+		ld a, h					;Store that position
+		ld [bc], a
+		inc c
 		ld a, l
-		cp $13
-		jp nc, reset_ice_and_move			;If hl is 9e13 or above, not valid push
-check_block_push_2:
-		ld a, [open_slide_spot]
-		ld d, $C2
-		ld e, a								;curr ice_block_count
+		ld [bc], a
+		inc c
+	pop hl
+	
+	add hl, de					;Get position that block will end up in after ramp
+	
+	push de
+		ld de, push_origins
+		ld a, [push_origins_ind]
+		add e
+		ld e, a
 		
-		call lcd_wait
-		ld a, [hl]
-		cp $FF
-		jp z, reset_ice_and_move			;If [hl] is ff, we're out of horizontal bounds
-		cp TRUE_PASSABLE_TILE
-		jr c, start_block_push
-		push af
-			call get_tile_pal
-			cp ICE_PAL
-			jr nz, check_block_push_no_ice	;Only if block isn't ice do we need 
-		pop af								;to consider impassible blocks
-		
-		
-		ld a, [de]
-		or a
-		jr nz, check_block_push_ice
-		inc e						;ice_block_hi
-		ld a, h						;If this is the first in a sequence of ice blocks	
-		ld [de], a					;save its addr
-		inc e						;ice_block_lo
-		ld a, l
+		ld a, h					;Store that position in both the block's data and
+		ld [bc], a				;as the starting point of the next push
 		ld [de], a
-		dec e
-		dec e						;ice_block_count
-		xor a
-check_block_push_ice:
-		inc a
-		ld [de], a					;ice_block_count
-		jr check_block_push_3
-	
-check_block_push_no_ice:
-		pop af
-		cp IMPASSABLE_TILE
-		jp z, reset_ice_and_move
+		inc c
+		inc e
+		ld a, l
+		ld [bc], a
+		ld [de], a
+		inc e
 		
-		xor a
-		ld [de], a		;If we are pushing a non-ice block, res ice count
+		ld b, d
+		ld c, e
+	pop de
 	
+	ld a, d						;Loading direction of new push into push_origins
+	ld [bc], a
+	inc c
+	ld a, e
+	ld [bc], a
+	
+	;!!! Maybe we can just store all non-linear push data in one array (what block is being erased, what direction of push)
+	ld a, [ramping_blocks_ind]	;We've only filled 4 bytes, but keep space of 9 for later (pal, tiles)
+	add 9
+	ld [ramping_blocks_ind], a
+	ld a, [push_origins_ind]
+	add 4
+	ld [push_origins_ind], a
+	
+	ld a, [total_segs_pushed]	;Storing and resetting (?) blocks_pushed.
+	dec a						;Want total_segs_pushed-1 as index
+	ld bc, blocks_pushed_arr
+	add c
+	ld c, a
+	ld a, [blocks_pushed]
+	sub 2
+	ld [bc], a
+	xor a
+	ld [blocks_pushed], a
+	
+	ld a, 1
+	ld [turn_switch], a
+	
+	ld b, d
+	ld c, e
+	
+	jp check_block_push
+		
+.check_ice:
+	ld a, [open_slide_spot]
+	ld d, $C2
+	ld e, a								;curr ice_block_count
+	
+	;push af
+	call get_tile_pal
+	cp ICE_PAL
+	jr nz, .no_ice					;Only if block isn't ice do we need 
+	;pop af							;to consider impassible blocks
+	
+	ld a, [de]
+	or a
+	jr nz, .ice
+	inc e						;ice_block_hi
+	ld a, h						;If this is the first in a sequence of ice blocks	
+	ld [de], a					;save its addr
+	inc e						;ice_block_lo
+	ld a, l
+	ld [de], a
+	dec e
+	dec e						;ice_block_count
+	xor a
+.ice:
+	inc a
+	ld [de], a					;ice_block_count
+	jr check_block_push_3
+
+.no_ice:
+	;pop af
+	ld a, [push_tile]
+	cp IMPASSABLE_TILE
+	jp z, reset_ice_and_move
+	
+	xor a
+	ld [de], a		;If we are pushing a non-ice block, res ice count
+
 check_block_push_3:
-	
-		ld a, [blocks_pushed]
-		inc a
-		ld [blocks_pushed], a
-		jr check_block_push
+	ld a, [blocks_pushed]
+	inc a
+	ld [blocks_pushed], a
+	jp check_block_push
 
 start_block_push:
-		call get_tile_pal
-		cp SLIME_PAL					;If bg space we're pushing to is slimed, 
-		jr nz, start_block_push_2		;we need to slime the block
-		ld a, h
-		ld [slimed_hi], a
-		ld a, l
-		ld [slimed_lo], a
-		;xor a
-		;ld [de], a						;ice_block_count
+	call get_tile_pal
+	cp SLIME_PAL					;If bg space we're pushing to is slimed, 
+	jr nz, start_block_push_2		;we need to slime the block
+	ld a, h
+	ld [slimed_hi], a
+	ld a, l
+	ld [slimed_lo], a
+	;xor a
+	;ld [de], a						;ice_block_count
 	
 start_block_push_2:
-	pop hl
-
+	xor a
+	ld [curr_push], a
+	
+start_block_push_loop:
+	ld b, a
+	ld a, [total_segs_pushed]
+	cp b
+	jp z, end_blocks_push			;Later (when we're looping over pushes)
+	
+	ld hl, push_origins
+	ldi a, [hl]
+	ld l, [hl]
+	ld h, a
+	
 	;Set 'a' to original map's block value
 	call get_mini_map_val
 	call filter_uncovered
 	;Now 'a' holds uncovered block value
 	
+	call get_block_0x_addr	;Outputs with de holding block_0x header addr
+		
 	push hl				;Preserve the map addr of the block we are jumping to
-		call get_block_0x_addr	;Outputs with de holding block_0x header addr
-		
+		xor a			;FOR NOW
+		ld hl, uncovered_blocks
 		ld a, d
-		ld [uncovered_block_hi], a
+		ldi [hl], a
 		ld a, e
-		ld [uncovered_block_lo], a
+		ld [hl], a
+	pop hl
 		
-		;Load tile_1/tile_2 with top-left/top-right by default
-		ld a, [de]
-		ld [tile_1], a
-		inc de
-		ld a, [de]
-		ld [tile_2], a
-	
-		ld a, c
-		cp 2
-		jr nz, start_block_push_left
-		ld b, 1				;b holds val added to hl to move to next row/col of tiles
-		ld c, 32			;c holds val added to hl to move to adjacent tile
-		
-		inc de
-		ld a, [de]
-		ld [tile_2], a
-		jr start_block_push_end
-start_block_push_left:
-		cp -2
-		jr nz, start_block_push_down
-		inc hl				;hl points to top-left tile of block. inc changes to top-right
-		ld b, -1
-		ld c, 32
 
-		ld a, [de]			;Top-right
-		ld [tile_1], a
-		inc de
-		inc de				;Bottom-right
-		ld a, [de]
-		ld [tile_2], a
-		jr start_block_push_end
+	;Load tile_1/tile_2 with top-left/top-right by default
+	ld a, [de]
+	ld [tile_1], a
+	inc de
+	ld a, [de]
+	ld [tile_2], a
+
+	ld a, c
+	cp 2
+	jr nz, start_block_push_left
+	ld b, 1				;b holds val added to hl to move to next row/col of tiles
+	ld c, 32			;c holds val added to hl to move to adjacent tile
+	
+	inc de
+	ld a, [de]
+	ld [tile_2], a
+	jr start_block_push_end
+start_block_push_left:
+	cp -2
+	jr nz, start_block_push_down
+	inc hl				;hl points to top-left tile of block. inc changes to top-right
+	ld b, -1
+	ld c, 32
+
+	ld a, [de]			;Top-right
+	ld [tile_1], a
+	inc de
+	inc de				;Bottom-right
+	ld a, [de]
+	ld [tile_2], a
+	jr start_block_push_end
 start_block_push_down:
-		cp 64
-		jr nz, start_block_push_up
-		ld b, 32
-		ld c, 1
-		jr start_block_push_end
+	cp 64
+	jr nz, start_block_push_up
+	ld b, 32
+	ld c, 1
+	jr start_block_push_end
 start_block_push_up:
-		ld bc, 32
-		add hl, bc
-		ld b, -32
-		ld c, 1
-		ld a, 2
-		inc de
-		ld a, [de]
-		ld [tile_1], a
-		inc de
-		ld a, [de]
-		ld [tile_2], a
-	
+	ld bc, 32
+	add hl, bc
+	ld b, -32
+	ld c, 1
+	ld a, 2
+	inc de
+	ld a, [de]
+	ld [tile_1], a
+	inc de
+	ld a, [de]
+	ld [tile_2], a
+
 start_block_push_end:
-	;pop de
+	ld de, block_push_addr
+	ld a, [curr_push]
+	sla a
+	add e
+	ld e, a
+	ld a, h
+	ld [de], a
+	inc e
+	ld a, l
+	ld [de], a
 	
-		ld a, h
-		ld [block_push_addr_hi], a		;Storing these for when we have to finish
-		ld a, l							;the anim (move the last 8 pixels u/d/l/r)
-		ld [block_push_addr_lo], a		
-		ld a, b
-		ld [block_push_next_line], a
-		ld a, c
-		ld [block_push_adj_tile], a
-		
-		xor a
-		ld [block_palette], a			;Bg palette is 0
-		
-		ld a, [blocks_pushed]
-		add a							;Double blocks pushed (to separate into tiles)
-		dec a
-		ld [blocks_pushed], a
-		
-		;ld d, $C2
-		;ld a, [open_slide_spot]
-		;ld e, a							;ice_block_count
-		push bc
-		push af
-			ld d, $C2
-			ld a, [open_slide_spot]
-			ld e, a							;ice_block_count
-			
-			ld a, [de]
-			add a
-			;dec a						;????
-			;ld d, a
-			ld b, a
-		pop af
-			;sub d
-			sub b
-			ld [blocks_pushed_2], a
-		pop bc
-		
-		push hl
-			ld hl, block_push_sfx
-			ld a, [de]
-			or a
-			call nz, ice_slide_setup
-			call play_noise
-		pop hl
-		call block_push_loop
+	ld de, next_line_arr
+	ld a, [curr_push]
+	add e
+	ld e, a
+	ld a, b
+	ld [de], a
 	
+	ld de, adj_tile_arr
+	ld a, [curr_push]
+	add e
+	ld e, a
+	ld a, c
+	ld [de], a
+	
+	;ld a, h
+	;ld [block_push_addr_hi], a		;Storing these for when we have to finish
+	;ld a, l							;the anim (move the last 8 pixels u/d/l/r)
+	;ld [block_push_addr_lo], a		
+	;ld a, b
+	;ld [block_push_next_line], a
+	;ld a, c
+	;ld [block_push_adj_tile], a
+	
+	xor a
+	ld [block_palette], a			;Bg palette is 0
+	
+	ld a, [blocks_pushed]
+	add a							;Double blocks pushed (to separate into tiles)
+	dec a
+	ld [blocks_pushed], a
+	
+	;ld d, $C2
+	;ld a, [open_slide_spot]
+	;ld e, a							;ice_block_count
+	push bc
+	push af
+		ld d, $C2
+		ld a, [open_slide_spot]
+		ld e, a							;ice_block_count
+		
+		ld a, [de]
+		add a
+		;dec a						;????
+		;ld d, a
+		ld b, a
+	pop af
+		;sub d
+		sub b
+		ld [blocks_pushed_2], a
+	pop bc
+	
+	push hl
+		ld hl, block_push_sfx
+		ld a, [de]
+		or a
+		call nz, ice_slide_setup
+		call play_noise
+	pop hl
+	call block_push_loop
+	
+	ld a, [curr_push]
+	inc a
+	ld [curr_push], a
+	jp start_block_push_loop
+		
 end_blocks_push:
-		pop hl					;Get the map addr of the block we are jumping to.
+	ld hl, push_origins		;Loading hl with the first block in push origins since this
+	ldi a, [hl]				;is always the addr we are jumping to
+	ld l, [hl]
+	ld h, a
+	
 	jp begin_move
 	
 	
-;A called function	
+;A called function
+;Setup: hl comes with address of first tile in the push. From there, we use adj and next line vals to work
+;up to other tiles. b is loaded with next line val, c with adj tile val. tile_1 and tile_2 come loaded with 
+;proper bg tiles considering the direction of the push. block_palette comes loaded with bg pal
 block_push_loop:
 		call lcd_wait
 		ld e, [hl]
@@ -1387,17 +1660,6 @@ block_push_loop:
 		ld a, e
 		ld [tile_1], a
 		
-		cp LOOSE_TILE				;If we're pushing a loose block, we need to
-		jr nz, block_push_loop_2	;update its saved addr at D2XX
-		ld a, [moving_step]
-		cp 0
-		jr nz, block_push_loop_2
-		;ld a, [loose_below_switch]	;Make sure this only triggers for a push--not an ori change
-		;or a
-		;jr nz, block_push_loop_2
-		;call pushed_loose_update
-		
-block_push_loop_2:
 		call VBK_On
 		call lcd_wait
 		ld a, [block_palette]
@@ -1441,13 +1703,9 @@ block_push_loop_3:
 		dec a
 		ld [blocks_pushed], a
 		jr nz, block_push_loop
-		;ld a, [moving_step]
-		;cp 8
-		;jp z, end_frame	;ret z				;!!! If this was for 2nd half of anim, ret
-		;ld a, [loose_below_switch]
-		;or a
-		;ret nz						;If this was for loose blocks, ret
+		
 		ret
+		
 		
 		
 ice_slide:
@@ -2540,6 +2798,10 @@ load_game_data::
 	ld [slimed_lo], a
 	ld [casting], a
 	ld [earth_casting], a
+	ld [ramping_blocks_ind], a
+	ld [push_origins_ind], a
+	ld [total_segs_pushed], a
+	ld [turn_switch], a
 	
 	ld d, 4
 	ld hl, ICE_MEM_START
@@ -2998,49 +3260,6 @@ load_sprite_2::
 	ldi [hl], a
 	
 	ret
-	
-;Sets vars partition_9D/9E with D2XX index that partitions are at
-;Also adds partition at end if needed
-;add_loose_partitions:
-;	ld hl, $D201
-;	ld bc, $C050				;Currently problematic since game.asm vars have gotten to C050
-;	ld d, 1						;Value to subtract curr_vram_ind by
-	
-;add_loose_partitions_loop:
-;	ld a, [hl]
-;	cp $FE
-;	jr nz, add_loose_partitions_loop_2
-;	inc l
-;	ld a, l
-;	ld [bc], a
-;	inc c
-;	jr add_loose_partitions_loop
-;add_loose_partitions_loop_2:
-;	cp $FF
-;	jr z, add_loose_partitions_end
-;	inc l
-;	jr add_loose_partitions_loop
-	
-;add_loose_partitions_end:
-;	ld a, c
-;	cp $52
-;	jr nz, add_loose_partitions_end_2
-	;If loose array ends with addrs in 9E section,
-	;we must decrement curr_vram_ind so that it 
-	;accurately holds value of ind before $FF
-;	ld a, [curr_vram_ind]
-;	sub d
-;	ld [curr_vram_ind], a
-;	ret 
-;add_loose_partitions_end_2:
-;	ld d, 0						;Since there aren't loose blocks in 9E, 
-;	ld [hl], $FE				;we won't subtract curr_vram_ind at all
-;	inc l
-;	ld [hl], $FF
-;	ld a, l
-;	ld [bc], a
-;	inc c
-;	jr add_loose_partitions_end
 	
 	
 	

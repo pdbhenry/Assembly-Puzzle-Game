@@ -49,7 +49,7 @@ begin:
 	call initdma
     
 	call check_level_save	;To init sram
-	ld a, 18
+	ld a, 19
 	call update_level_save
 	;call check_level_save
 			;will have check_level_save in final product to set a

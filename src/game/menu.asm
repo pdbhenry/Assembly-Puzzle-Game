@@ -235,6 +235,7 @@ menu_page_1_post_loop:
 	ld bc, -$40
 menu_page_1_clear_gt:
 	add hl,bc
+	call lcd_wait
 	ld [hl],00
 	ret
 	
