@@ -215,3 +215,229 @@ ori_face_var_setup::
 	ld a, RAMP_TL_TILE
 	ld [rampable_2], a
 	ret
+	
+	
+;Used to add map addr and direction of push to push_origins
+;hl comes with map addr
+;bc comes with dir val
+;Destroys de
+add_push_origins::
+	ld a, [push_origins_ind]
+	ld de, push_origins				;We load the starting position and the direction
+	add e
+	ld e, a
+	
+	ld a, h
+	ld [de], a
+	inc e
+	ld a, l
+	ld [de], a
+	inc e
+	ld a, b
+	ld [de], a
+	inc e
+	ld a, c
+	ld [de], a
+	ret
+	
+	
+
+rem_ramping_blocks::					;Removes block that is ramping
+	push hl
+		ld a, [ramping_blocks_ind]
+		cp 0
+		jr z, .end
+		
+		ld de, ramping_blocks
+.loop:								;Store ramping block's pal and tiles
+		ld a, [de]					;First, change ramp block to look filled.
+		ld h, a
+		inc e
+		ld a, [de]
+		inc e
+		ld l, a
+		call lcd_wait
+		ld a, [hl]
+		
+		add $10						;Based on our tilemap, the filled ramp will always be have tile
+		call lcd_wait				;numbers $10 ahead of the non-filled ramp
+		ldi [hl], a
+		inc a
+		ld [hl], a
+		inc a
+	
+		ld bc, 31
+		add hl, bc
+		
+		call lcd_wait
+		ldi [hl], a
+		inc a
+		ld [hl], a
+		
+		ld a, [de]
+		ld h, a
+		inc e
+		ld a, [de]
+		ld l, a
+		inc e
+		inc e						;Get past dest addr
+		inc e
+		
+		call get_tile_pal
+		ld [de], a
+		inc e
+		
+		ld a, 0
+		push hl
+			call set_block_pal
+		pop hl
+		
+		call lcd_wait
+		ld a, [hl]
+		ld [hl], 0					;Setting the tiles to default bg block
+		ld [de], a
+		inc l
+		inc e
+		call lcd_wait
+		ld a, [hl]
+		ld [hl], 0
+		ld [de], a
+		inc e
+		
+		
+		add hl, bc
+
+		call lcd_wait
+		ld a, [hl]
+		ld [hl], 2
+		ld [de], a
+		inc l
+		inc e
+		call lcd_wait
+		ld a, [hl]
+		ld [hl], 2
+		ld [de], a
+		inc e
+		
+		ld bc, ramping_blocks
+		ld a, e	
+		sub c						;de - ramping_blocks = curr ind we're at
+		ld b, a
+		ld a, [ramping_blocks_ind]
+		cp b
+		jr nz, .loop
+		
+.end:
+	pop hl
+	ret
+	
+	
+	
+ret_ramping_blocks::					;Placing a ramping block in its new position
+	ld a, [ramping_blocks_ind]
+	or a
+	ret z
+	
+	push hl
+		ld de, ramping_blocks
+.loop:								;Store ramping block's pal and tiles
+		ld a, [de]					;First, change ramp block to look filled.
+		ld h, a
+		inc e
+		ld a, [de]
+		inc e
+		ld l, a
+		call lcd_wait
+		ld a, [hl]
+		
+		sub $10						;Based on our tilemap, the filled ramp will always be have tile
+		call lcd_wait				;numbers $10 ahead of the non-filled ramp
+		ldi [hl], a
+		inc a
+		ld [hl], a
+		inc a
+	
+		ld bc, 31
+		add hl, bc
+		
+		call lcd_wait
+		ldi [hl], a
+		inc a
+		ld [hl], a
+		
+		inc e
+		inc e
+		ld a, [de]
+		ld h, a
+		inc e
+		ld a, [de]
+		ld l, a
+		inc e
+		
+		ld a, [de]
+		push hl
+			call set_block_pal
+		pop hl
+		inc e
+		
+		ld a, [de]
+		call lcd_wait
+		ld [hl], a					;Setting the tiles to default bg block
+		inc l
+		inc e
+		call lcd_wait
+		ld a, [de]
+		ld [hl], a
+		inc e
+		
+		ld bc, 31
+		add hl, bc
+
+		call lcd_wait
+		ld a, [de]
+		ld [hl], a
+		inc l
+		inc e
+		call lcd_wait
+		ld a, [de]
+		ld [hl], a
+		inc e
+		
+		ld bc, ramping_blocks
+		ld a, e	
+		sub c						;de - ramping_blocks = curr ind we're at
+		ld b, a
+		
+		ld a, [ramping_blocks_ind]
+		cp b
+		jr nz, .loop
+		
+.end:
+	xor a
+	ld [ramping_blocks_ind], a
+	ld [turn_switch], a
+	ld [push_origins_ind], a
+	pop hl
+	
+
+;Checks if the next block we're pushing has been visited (is in the current push). If so,
+;the push is cancelled. If not, new visited addr is stored
+add_visited::
+	push hl
+		ld d, h
+		ld e, l
+		ld hl, [visited]
+		ld a, [visited_ind]
+		ld b, a
+check_visited_loop:
+		ldi a, [hl]
+		cp d
+		jr nz, .no_match
+		ldi a, [hl]
+		cp e
+		jr nz, .no_match
+		
+.no_match:
+		dec b
+		jr nz, check_visited_loop
+	pop hl

@@ -14,14 +14,13 @@ move_xy:: DW				;Byte 1 is spr_x change per frame and byte 2 is spr_y change
 move_xy_old:: DW				;Holds original movement of input before altered by a ramp
 move_diag_down:: DB			;Holds the value spr_x or spr_y would change by to move diagonally.
 moved:: DB					;If set, we have moved this frame. Used to facilitate smooth movement each frame
-dest_tile_addr_hi:: DB 		;Holds the tile address that goblin is actively moving to
-dest_tile_addr_lo:: DB
+dest_tile_addr:: DW 		;Holds the tile address that goblin is actively moving to
 curr_level_addr_hi:: DB
 curr_level_addr_lo:: DB
 falling:: DB				;If not zero, goblin is falling. Used for animation and to increase speed of move_anim
 facing:: DB					;Used for knowing where the character is facing
 blocks_pushed:: DB			;Stores # of blocks being pushed with a jump_check
-blocks_pushed_2:: DB		;Stores the same val, but doesn't dec
+;blocks_pushed_2:: DB		;Stores the same val, but doesn't dec
 tile_1:: DB					;4 tiles to make a 16x16 block. Used when pushing and loading the map
 tile_2:: DB					;From 1-4, tiles in order of top-left, top-right, bottom-left, bottom-right
 tile_3:: DB
@@ -98,10 +97,10 @@ total_segs_pushed:: DB		;Ind for arr below
 curr_push:: DB				;Holds curr ind of push we're processing
 turn_switch:: DB			;If nz, we have turned and are checking if a block is right after that turn.
 
-ramping_blocks:: DS 45		;Holds data of blocks that will be shifted by ramps (orig pos, new pos, pal, tiles)
-push_origins:: DS 15			;Holds the map addr of first block in a push. Also holds the next/adj tile vals.
+ramping_blocks:: DS 55		;Holds data of blocks that will be shifted by ramps (orig pos, new pos, ramp pos, pal, tiles)
+push_origins:: DS 15		;Holds the map addr of first block in a push. Also holds the next/adj tile vals.
 blocks_pushed_arr:: DS 5	;Holds the # of blocks pushed for each push happening
-uncovered_blocks:: DS 10	;Holds addrs of header in block_tiles.inc for 
+uncovered_blocks:: DS 10	;Holds addrs of header in block_tiles.inc for blocks being uncovered in a push
 
 block_push_addr:: DS 10		;For block push anim. Holds addr of tile that was last shifted.
 next_line_arr:: DS 5
@@ -354,9 +353,9 @@ begin_move:
 	ld [ori_changed], a		;Orientation is not being changed this frame, so unset
 	
 	ld a, h
-	ld [dest_tile_addr_hi], a
+	ld [dest_tile_addr], a
 	ld a, l
-	ld [dest_tile_addr_lo], a
+	ld [dest_tile_addr+1], a
 	
 	ld a, [new_player_x]
 	ld [player_x], a
@@ -427,9 +426,10 @@ moving_step_check_3:
 	call change_sprite
 	ld a, [total_segs_pushed]		;Using total_segs_pushed as a way to tell
 	or a							;if we're in the middle of pushing
-	jp z, moving_step_push_end;		end_frame		;ret z							;!!!
+	jp z, ret_ramp					;		end_frame		;ret z							;!!!
 ;------------------FINISHING BLOCK PUSH ANIM---------------------------------
-
+	
+finish_block_push:
 	xor a
 	ld [curr_push], a
 	
@@ -437,7 +437,7 @@ finish_block_push_loop:
 	ld b, a
 	ld a, [total_segs_pushed]
 	cp b
-	jp z, moving_step_push_end
+	jp z, ret_ramp					;moving_step_push_end
 	
 	ld a, [curr_push]
 	sla a							;curr_push x 2, block_push_addr stores 2-byte addrs at a time
@@ -471,9 +471,14 @@ moving_step_push:
 	ld a, [de]
 	ld c, a
 	
-	ld a, [blocks_pushed_2]
-	cp 2							;If blocks_pushed_2 is <default val of 2, 
-	jp c, moving_step_push_end		;we're just pushing ice and this anim is not needed
+;	ld a, [blocks_pushed_2]
+	ld a, [curr_push]
+	ld de, blocks_pushed_arr
+	add e
+	ld e, a
+	ld a, [de]
+;	cp 2							;If blocks_pushed_2 is <default val of 2, 
+;	jp c, ret_ramping_blocks;		moving_step_push_end	;we're just pushing ice and this anim is not needed
 	ld [blocks_pushed], a
 	
 	push hl
@@ -497,13 +502,14 @@ moving_step_push:
 	xor a							;!!! A potential fix to storing pal from
 	ld [block_palette], a			;!!! first 8 pixel push
 	
-	push bc
-		ld a, [curr_push]
-		ld bc, next_line_arr
-		add c
-		ld c, a 
-		ld a, [bc]
-	pop bc
+	ld a, b
+	;push bc							;Have to retrieve next_line val again for dir check
+	;	ld a, [curr_push]
+	;	ld bc, next_line_arr
+	;	add c
+	;	ld c, a 
+	;	ld a, [bc]
+	;pop bc	
 	cp 32							;If push is down
 	jr nz, moving_step_push_left
 
@@ -540,6 +546,9 @@ moving_step_push_block:
 	ld [curr_push], a
 	jp finish_block_push_loop
 	
+ret_ramp:
+	call ret_ramping_blocks
+
 moving_step_push_end:
 	xor a
 	ld [total_segs_pushed], a
@@ -631,9 +640,9 @@ moving_step_check_6:
 	jp begin_move
 	
 moving_step_check_7:
-	ld a, [dest_tile_addr_hi]
+	ld a, [dest_tile_addr]
 	ld h, a
-	ld a, [dest_tile_addr_lo]
+	ld a, [dest_tile_addr+1]
 	ld l, a
 	
 	call lcd_wait
@@ -1245,35 +1254,23 @@ moving_check_above_ramp:
 	;jp begin_move
 	
 moving_check_above_4:
-	ld de, push_origins				;We load the starting position and the direction
-	ld a, h
-	ld [de], a
-	inc e
-	ld a, l
-	ld [de], a
-	inc e
-	ld a, b
-	ld [de], a
-	inc e
-	ld a, c
-	ld [de], a
-	
-	ld a, 4
-	ld [push_origins_ind], a
-	
+	call add_push_origins
 	;push hl							;Store jumped to block
 	;ld d, h
 	;ld e, l
-	
 	ld a, 2							;Default is 2
 	ld [blocks_pushed], a
-	dec a
-	ld [total_segs_pushed], a		;Default segs is 1
+	ld a, h
+	ld [dest_tile_addr], a
+	ld a, l
+	ld [dest_tile_addr+1], a
 	
 check_block_push:					;CHECKING BOUNDS
-	add hl, bc					
+	add hl, bc
+	
+check_block_push_no_add:	
 	ld a, h
-	cp $9c						;If h is below 9c, blocks are pushed 
+	cp $9c							;If h is below 9c, blocks are pushed 
 	jp c, reset_ice_and_move			;against bounds. Not valid push
 	cp $9e
 	jr nz, check_block_push_2
@@ -1281,7 +1278,7 @@ check_block_push:					;CHECKING BOUNDS
 	cp $13
 	jp nc, reset_ice_and_move			;If hl is 9e13 or above, not valid push
 		
-check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
+check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	call lcd_wait
 	ld a, [hl]
 	ld [push_tile], a
@@ -1294,11 +1291,16 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 	or a								;we have another segment to push.
 	jr z, .check_ramp
 	
-	ld a, [total_segs_pushed]
-	inc a
-	ld [total_segs_pushed], a
 	xor a
 	ld [turn_switch], a
+	
+	call add_push_origins
+	;ld a, [push_origins_ind]
+	;add 4
+	;ld [push_origins_ind], a
+	;ld a, [total_segs_pushed]
+	;inc a
+	;ld [total_segs_pushed], a
 	
 .check_ramp:
 	ld a, [rampable_3]
@@ -1329,7 +1331,7 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 		
 .check_neg_ramp:
 	cp e
-	jr nz, .check_ice
+	jp nz, .check_ice
 	
 	ld a, RAMP_TL_TILE
 	ld [rampable_3], a
@@ -1348,6 +1350,18 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 	ld [rampable_4], a
 	
 .store_turning_block:
+	push bc						;Storing position of ramp for when we animate it
+		ld bc, ramping_blocks
+		ld a, [ramping_blocks_ind]
+		add c
+		ld c, a
+		ld a, h
+		ld [bc], a
+		inc c
+		ld a, l
+		ld [bc], a
+	pop bc
+	
 	push hl
 		ld a, b
 		cpl
@@ -1360,6 +1374,7 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 
 		ld bc, ramping_blocks
 		ld a, [ramping_blocks_ind]
+		add 2
 		add c
 		ld c, a
 		
@@ -1373,49 +1388,57 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 	
 	add hl, de					;Get position that block will end up in after ramp
 	
-	push de
-		ld de, push_origins
-		ld a, [push_origins_ind]
-		add e
-		ld e, a
+	;push de
+		;ld de, push_origins
+		;ld a, [push_origins_ind]
+		;add e
+		;ld e, a
 		
-		ld a, h					;Store that position in both the block's data and
-		ld [bc], a				;as the starting point of the next push
-		ld [de], a
-		inc c
-		inc e
-		ld a, l
-		ld [bc], a
-		ld [de], a
-		inc e
-		
-		ld b, d
-		ld c, e
-	pop de
-	
-	ld a, d						;Loading direction of new push into push_origins
-	ld [bc], a
+	ld a, h					;Store that position in both the block's data and
+	ld [bc], a				;as the starting point of the next push
+	;ld [de], a
 	inc c
-	ld a, e
+	;inc e
+	ld a, l
 	ld [bc], a
+		;ld [de], a
+		;inc e
+		
+		;ld b, d
+		;ld c, e
+	;pop de
+	
+	;ld a, d						;Loading direction of new push into push_origins
+	;ld [bc], a
+	;inc c
+	;ld a, e
+	;ld [bc], a
 	
 	;!!! Maybe we can just store all non-linear push data in one array (what block is being erased, what direction of push)
 	ld a, [ramping_blocks_ind]	;We've only filled 4 bytes, but keep space of 9 for later (pal, tiles)
-	add 9
+	add 11
 	ld [ramping_blocks_ind], a
-	ld a, [push_origins_ind]
-	add 4
-	ld [push_origins_ind], a
 	
 	ld a, [total_segs_pushed]	;Storing and resetting (?) blocks_pushed.
-	dec a						;Want total_segs_pushed-1 as index
 	ld bc, blocks_pushed_arr
 	add c
 	ld c, a
 	ld a, [blocks_pushed]
 	sub 2
-	ld [bc], a
-	xor a
+	jr z, .no_push
+	
+	inc a
+	ld [bc], a	
+	ld a, [total_segs_pushed]
+	inc a
+	ld [total_segs_pushed], a
+	
+	ld a, [push_origins_ind]
+	add 4
+	ld [push_origins_ind], a
+	
+.no_push:						;In the case that the only block we are pushing is ramping, 
+	xor a						;there's no call to block_push_loop needed
 	ld [blocks_pushed], a
 	
 	ld a, 1
@@ -1424,7 +1447,7 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 	ld b, d
 	ld c, e
 	
-	jp check_block_push
+	jp check_block_push_no_add
 		
 .check_ice:
 	ld a, [open_slide_spot]
@@ -1461,18 +1484,55 @@ check_block_push_2:							;CHECKING KINDS OF BLOCKS BEING PUSHED
 	jp z, reset_ice_and_move
 	
 	xor a
-	ld [de], a		;If we are pushing a non-ice block, res ice count
+	ld [de], a				;If we are pushing a non-ice block, res ice count
 
 check_block_push_3:
 	ld a, [blocks_pushed]
+	or a					;If a is 0, we start blocks_pushed back at 2 rather than incrementing by 1
+	jr nz, .skip_inc
+	inc a
+.skip_inc:
 	inc a
 	ld [blocks_pushed], a
+	
 	jp check_block_push
 
 start_block_push:
+	ld a, [ramping_blocks_ind]
+	or a
+	jr z, .cont
+	;inc a
+	;ld [total_segs_pushed], a
+	;jr .cont
+
+.ramps_present:
+	call rem_ramping_blocks
+.cont:
+	ld a, [blocks_pushed]		;If we ended our push with blocks_pushed >= 2, we need to inc total_segs_pushed
+	cp 2
+	jr nc, .cont_2
+	
+	ld a, [total_segs_pushed]	;Storing and resetting (?) blocks_pushed.
+	or a
+	jp z, end_blocks_push
+	jr start_block_push_2
+	
+.cont_2:
+	ld a, [total_segs_pushed]
+	inc a
+	ld [total_segs_pushed], a
+	
+	dec a
+	ld bc, blocks_pushed_arr
+	add c
+	ld c, a
+	ld a, [blocks_pushed]
+	ld [bc], a
+	
+start_block_push_2:
 	call get_tile_pal
 	cp SLIME_PAL					;If bg space we're pushing to is slimed, 
-	jr nz, start_block_push_2		;we need to slime the block
+	jr nz, start_block_push_3		;we need to slime the block
 	ld a, h
 	ld [slimed_hi], a
 	ld a, l
@@ -1480,7 +1540,7 @@ start_block_push:
 	;xor a
 	;ld [de], a						;ice_block_count
 	
-start_block_push_2:
+start_block_push_3:
 	xor a
 	ld [curr_push], a
 	
@@ -1490,10 +1550,20 @@ start_block_push_loop:
 	cp b
 	jp z, end_blocks_push			;Later (when we're looping over pushes)
 	
-	ld hl, push_origins
-	ldi a, [hl]
-	ld l, [hl]
+	ld a, [curr_push]				;Get curr_push * 6 since push_origins has units of 6 bytes
+	sla a
+	sla a
+	
+	ld bc, push_origins
+	add c
+	ld c, a
+	
+	ld a, [bc]
 	ld h, a
+	inc c
+	ld a, [bc]
+	ld l, a
+	inc c
 	
 	;Set 'a' to original map's block value
 	call get_mini_map_val
@@ -1503,8 +1573,11 @@ start_block_push_loop:
 	call get_block_0x_addr	;Outputs with de holding block_0x header addr
 		
 	push hl				;Preserve the map addr of the block we are jumping to
-		xor a			;FOR NOW
+		ld a, [curr_push]
+		sla a
 		ld hl, uncovered_blocks
+		add l
+		ld l, a
 		ld a, d
 		ldi [hl], a
 		ld a, e
@@ -1519,7 +1592,9 @@ start_block_push_loop:
 	ld a, [de]
 	ld [tile_2], a
 
-	ld a, c
+	inc c
+	ld a, [bc]
+	;ld a, c
 	cp 2
 	jr nz, start_block_push_left
 	ld b, 1				;b holds val added to hl to move to next row/col of tiles
@@ -1600,30 +1675,35 @@ start_block_push_end:
 	xor a
 	ld [block_palette], a			;Bg palette is 0
 	
-	ld a, [blocks_pushed]
+	ld de, blocks_pushed_arr
+	ld a, [curr_push]
+	add e
+	ld e, a
+	ld a, [de]
 	add a							;Double blocks pushed (to separate into tiles)
 	dec a
 	ld [blocks_pushed], a
+	ld [de], a
 	
-	;ld d, $C2
+	;ld d, $C2						;!!!!!! ICE stuff we will bring back later
 	;ld a, [open_slide_spot]
 	;ld e, a							;ice_block_count
-	push bc
-	push af
+;	push bc
+;	push af
 		ld d, $C2
 		ld a, [open_slide_spot]
 		ld e, a							;ice_block_count
 		
-		ld a, [de]
-		add a
+;		ld a, [de]
+;		add a
 		;dec a						;????
 		;ld d, a
-		ld b, a
-	pop af
+;		ld b, a
+;	pop af
 		;sub d
-		sub b
-		ld [blocks_pushed_2], a
-	pop bc
+;		sub b
+;		ld [blocks_pushed_2], a
+;	pop bc
 	
 	push hl
 		ld hl, block_push_sfx
@@ -1637,13 +1717,13 @@ start_block_push_end:
 	ld a, [curr_push]
 	inc a
 	ld [curr_push], a
-	jp start_block_push_loop
-		
+	jp start_block_push_loop	
+
 end_blocks_push:
-	ld hl, push_origins		;Loading hl with the first block in push origins since this
-	ldi a, [hl]				;is always the addr we are jumping to
-	ld l, [hl]
+	ld a, [dest_tile_addr]
 	ld h, a
+	ld a, [dest_tile_addr+1]
+	ld l, a
 	
 	jp begin_move
 	
