@@ -130,4 +130,8 @@ IMPASSABLE_BLOCK_16 		equ $1A
 LOOSE_BLOCK_16 				equ $1B
 SOIL_BLOCK_16 				equ $1F
 
+UP_PUSH						equ $E0
+DOWN_PUSH					equ $20
+RIGHT_PUSH					equ $01
+LEFT_PUSH					equ $FF
 menu_tile_data_size EQU $06B0

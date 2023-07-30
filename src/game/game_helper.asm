@@ -223,6 +223,7 @@ ori_face_var_setup::
 ;Destroys de
 add_push_origins::
 	ld a, [push_origins_ind]
+	sub 4
 	ld de, push_origins				;We load the starting position and the direction
 	add e
 	ld e, a
@@ -238,6 +239,7 @@ add_push_origins::
 	inc e
 	ld a, c
 	ld [de], a
+
 	ret
 	
 	
@@ -282,6 +284,7 @@ rem_ramping_blocks::					;Removes block that is ramping
 		inc e
 		inc e						;Get past dest addr
 		inc e
+		;inc e						;
 		
 		call get_tile_pal
 		ld [de], a
@@ -374,6 +377,8 @@ ret_ramping_blocks::					;Placing a ramping block in its new position
 		ld l, a
 		inc e
 		
+		;inc e						;
+		
 		ld a, [de]
 		push hl
 			call set_block_pal
@@ -413,31 +418,66 @@ ret_ramping_blocks::					;Placing a ramping block in its new position
 		jr nz, .loop
 		
 .end:
-	xor a
-	ld [ramping_blocks_ind], a
-	ld [turn_switch], a
-	ld [push_origins_ind], a
 	pop hl
+	ret
 	
 
 ;Checks if the next block we're pushing has been visited (is in the current push). If so,
-;the push is cancelled. If not, new visited addr is stored
+;the push is cancelled (returning with a=$FF). If not, new visited addr is stored
+;hl comes with curr block map addr
+;Destroys de
 add_visited::
 	push hl
+	push bc
 		ld d, h
 		ld e, l
-		ld hl, [visited]
+		ld hl, visited
 		ld a, [visited_ind]
+		or a
+		jr z, checked_all_visited
 		ld b, a
 check_visited_loop:
 		ldi a, [hl]
 		cp d
-		jr nz, .no_match
+		jr nz, .no_match_inc
 		ldi a, [hl]
 		cp e
 		jr nz, .no_match
-		
+		ld a, $FF
+		jr add_visited_end
+.no_match_inc:
+		inc l
 .no_match:
 		dec b
 		jr nz, check_visited_loop
+checked_all_visited:
+		ld a, [visited_ind]			;In the case that the curr block is newly visited, 
+		inc a						;add it to the arr and inc ind
+		ld [visited_ind], a
+		dec a
+		sla a
+		ld hl, visited
+		add l
+		ld l, a
+		ld a, d
+		ldi [hl], a
+		ld [hl], e
+add_visited_end:
+	pop bc
 	pop hl
+	ret
+	
+;A ramp's action directions are the two directions which it's ramp half are facing and, if pushed in an action direction, 
+;have the potential to ramp what it's being pushed into (or get combined with another ramp).
+;If pushed in an action direction (Ex: UP) into a ramp where only its corresponding action direction is opposite (Ex: DOWN), no
+;ramping happens, the push continues in a straight direction
+;If pushed in an action direction into a ramp with totally opposite action directions, the ramps combine
+BR_ACTION_DIRS::
+	DB UP_PUSH, LEFT_PUSH
+BL_ACTION_DIRS::
+	DB UP_PUSH, RIGHT_PUSH
+TR_ACTION_DIRS::
+	DB DOWN_PUSH, LEFT_PUSH
+TL_ACTION_DIRS::
+	DB DOWN_PUSH, RIGHT_PUSH
+
