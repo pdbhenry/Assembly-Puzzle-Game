@@ -223,7 +223,6 @@ ori_face_var_setup::
 ;Destroys de
 add_push_origins::
 	ld a, [push_origins_ind]
-	sub 4
 	ld de, push_origins				;We load the starting position and the direction
 	add e
 	ld e, a
@@ -466,6 +465,193 @@ add_visited_end:
 	pop bc
 	pop hl
 	ret
+
+
+;bc holds direction of push
+;de hold rampable_3/4
+turn_dir::
+	cp d								;If a==d, we are ramping in a positive direction
+	jr nz, turn_dir_neg
+
+turn_dir_pos::
+	ld a, RAMP_BR_TILE					;Setting ramps that would turn a block in the new direction we're headed
+	ld [rampable_4], a
+	
+	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
+	jr z, .pos_ramp_64					;turning right by ramp (since we know we're ramping positively)
+	ld de, 64							;If jumping right/left, we are turning down since we're ramping
+	ld a, RAMP_BL_TILE					;positively
+	ld [rampable_3], a
+	ret									;Originally "jr .store_turning_block"
+		
+.pos_ramp_64:
+	ld de, 2
+	ld a, RAMP_TR_TILE
+	ld [rampable_3], a
+	ret
+		
+turn_dir_neg::
+	cp e
+	jp nz, pushing_ramp				;We've determined curr block is a ramp, but not one where the slope is facing
+										;the dir of the push, so it is getting pushed.
+	ld a, RAMP_TL_TILE
+	ld [rampable_3], a
+
+	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
+	jr z, .neg_ramp_64					;turning right by ramp (since we know we're ramping positively)
+;
+	ld de, -64							;If jumping right/left, we are turning down since we're ramping positively
+	ld a, RAMP_TR_TILE
+	ld [rampable_4], a
+	ret
+		
+.neg_ramp_64:
+	ld de, -2
+	ld a, RAMP_BL_TILE
+	ld [rampable_4], a
+	ret
+	
+pushing_ramp:
+	sub RAMP_TILE_MIN
+	sra a
+	ld de, BR_ACTION_DIRS
+	add e
+	ld e, a
+	ld a, [de]
+	ld [action_dir_vert], a
+	inc e
+	ld a, [de]
+	ld [action_dir_hor], a	
+	ld a, $FF
+	ret
+	
+
+
+turn_dir_2::
+	push bc
+		cp c							;First we figure out which action dir aligns with the dir of our push.
+		ld c, 0
+		jr nz, .hor						;We load a with the other action dir. That's the one we want to compare
+		ld a, [action_dir_hor]			;with the upcoming ramp
+		ld c, 1
+.hor:
+		ld b, a
+	
+		ld a, [push_tile]
+		cp d
+		jr nz, .rampable_neg
+		
+.rampable_neg:
+		cp e
+		jr nz, .not_rampable
+		
+.not_rampable:
+	
+;WORK ON THIS FURTHER, ACCORDING TO TXT DOC
+store_turning_block_2:
+	ld a, [turn_switch]
+	or a
+	jr z, .first_turn
+	ld a, [ramping_blocks_ind]
+	sub 11
+	ld [ramping_blocks_ind], a
+	
+.first_turn:
+	push bc								;Storing $FF in position of ramp so we know not to animate it
+		ld bc, ramping_blocks
+		ld a, [ramping_blocks_ind]
+		add c
+		ld c, a
+		ld a, $FF
+		ld [bc], a
+		inc c
+		ld [bc], a
+	pop bc
+	
+	ld a, [turn_switch]
+	or a
+	jr z, .store_orig_block
+	ld bc, ramping_blocks
+	ld a, [ramping_blocks_ind]
+	add 4
+	add c
+	ld c, a
+	jr .skip_orig_block
+	
+.store_orig_block:
+	push hl
+		ld a, b
+		cpl
+		ld b, a
+		ld a, c
+		cpl
+		inc a
+		ld c, a
+		add hl, bc				;Get position of block being pushed into the ramp
+
+		ld bc, ramping_blocks
+		ld a, [ramping_blocks_ind]
+		add 2
+		add c
+		ld c, a
+		
+		ld a, h					;Store that position
+		ld [bc], a
+		inc c
+		ld a, l
+		ld [bc], a
+		inc c
+	pop hl
+	
+.skip_orig_block:
+	add hl, de					;Get position that block will end up in after ramp
+		
+	ld a, h					;Store that position in both the block's data and
+	ld [bc], a				;as the starting point of the next push
+	inc c
+	ld a, l
+	ld [bc], a
+	
+	;!!! Maybe we can just store all non-linear push data in one array (what block is being erased, what direction of push)
+	ld a, [ramping_blocks_ind]	;We've only filled 4 bytes, but keep space of 9 for later (pal, tiles)
+	add 11
+	ld [ramping_blocks_ind], a
+	
+	ld a, [turn_switch]			;If we're ramping into another ramp, there's, certainly no new seg to add.
+	or a
+	jr nz, .no_push
+	
+	ld a, [total_segs_pushed]	;Storing and resetting (?) blocks_pushed.
+	ld bc, blocks_pushed_arr
+	add c
+	ld c, a
+	ld a, [blocks_pushed]
+	sub 2
+	jr z, .no_push
+	
+	inc a						;If there is an actual segment to push, increment these vars
+	ld [bc], a	
+	ld a, [total_segs_pushed]
+	inc a
+	ld [total_segs_pushed], a
+	
+	ld a, [push_origins_ind]
+	add 4
+	ld [push_origins_ind], a
+	
+.no_push:						;In the case that the only block we are pushing is ramping, 
+	xor a						;there's no call to block_push_loop needed
+	ld [blocks_pushed], a
+	
+	ld a, 1
+	ld [turn_switch], a
+	
+	ld b, d
+	ld c, e
+	
+	jp check_block_push_no_add
+	
+	
 	
 ;A ramp's action directions are the two directions which it's ramp half are facing and, if pushed in an action direction, 
 ;have the potential to ramp what it's being pushed into (or get combined with another ramp).

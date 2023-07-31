@@ -96,6 +96,8 @@ push_origins_ind:: DB		;Ind for arr below. push_origins allows multiple pushes i
 total_segs_pushed:: DB		;Ind for arr below
 curr_push:: DB				;Holds curr ind of push we're processing
 turn_switch:: DB			;If nz, we have turned and are checking if a block is right after that turn.
+action_dir_vert:: DB		;A ramp's two action dirs are the directions that, if pushed or approached in, can lead to ramping
+action_dir_hor:: DB			;Ex: A BL ramp (|\) has the actions dirs of UP and RIGHT
 
 ramping_blocks:: DS 55		;11, Holds data of blocks that will be shifted by ramps (orig pos, new pos, ramp pos, pal, tiles)
 push_origins:: DS 20		;4, Holds the map addr of first block in a push. Also holds the next/adj tile vals.
@@ -1196,9 +1198,6 @@ moving_check_above_3_no_ice:
 
 moving_check_above_4:
 	call add_push_origins
-	;push hl							;Store jumped to block
-	;ld d, h
-	;ld e, l
 	
 	ld a, 2								;Default is 2
 	ld [blocks_pushed], a
@@ -1233,55 +1232,39 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	cp $ff
 	jp z, reset_ice_and_move
 	
+
+	
 .check_ramp:
 	ld a, [rampable_3]
 	ld d, a
 	ld a, [rampable_4]
 	ld e, a
+	
+	ld a, [action_dir_vert]
+	or a
+	call nz, turn_dir_2
+	
 	ld a, [push_tile]
 	
-	cp d								;If a==d, we are ramping in a positive direction
-	jr nz, .check_neg_ramp
-
-	ld a, RAMP_BR_TILE					;Setting ramps that would turn a block in the new direction we're headed
-	ld [rampable_4], a
+	cp RAMP_TILE_MIN					;Making sure curr block is a ramp. If not, skip past this.
+	jp c, .check_post_turn
+	cp RAMP_TILE_MAX
+	jp nc, .check_post_turn
 	
-	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
-	jr z, .pos_ramp_64					;turning right by ramp (since we know we're ramping positively)
-;
-	ld de, 64							;If jumping right/left, we are turing down since we're ramping
-	ld a, RAMP_BL_TILE					;positively
-	ld [rampable_3], a
-	jr .store_turning_block
-		
-.pos_ramp_64:
-	ld de, 2
-	ld a, RAMP_TR_TILE
-	ld [rampable_3], a
-	jr .store_turning_block
-		
-.check_neg_ramp:
-	cp e
-	jp nz, .check_post_turn
-	
-	ld a, RAMP_TL_TILE
-	ld [rampable_3], a
-
-	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
-	jr z, .neg_ramp_64					;turning right by ramp (since we know we're ramping positively)
-;
-	ld de, -64							;If jumping right/left, we are turning down since we're ramping positively
-	ld a, RAMP_TR_TILE
-	ld [rampable_4], a
-	jr .store_turning_block
-		
-.neg_ramp_64:
-	ld de, -2
-	ld a, RAMP_BL_TILE
-	ld [rampable_4], a
+	call turn_dir						;Given what we're ramping off of, changes vals of rampable_3/4 and loads
+	cp $FF								;de with the new direction after turn. If we're not ramping off of this curr
+	jp z, .check_post_turn				;ramp, we are pushing it--we get its action dirs and skip .store_turning_block
 	
 .store_turning_block:
-	push bc						;Storing position of ramp for when we animate it
+	ld a, [turn_switch]
+	or a
+	jr z, .first_turn
+	ld a, [ramping_blocks_ind]
+	sub 11
+	ld [ramping_blocks_ind], a
+	
+.first_turn:
+	push bc								;Storing position of ramp for when we animate it
 		ld bc, ramping_blocks
 		ld a, [ramping_blocks_ind]
 		add c
@@ -1293,6 +1276,17 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 		ld [bc], a
 	pop bc
 	
+	ld a, [turn_switch]
+	or a
+	jr z, .store_orig_block
+	ld bc, ramping_blocks
+	ld a, [ramping_blocks_ind]
+	add 4
+	add c
+	ld c, a
+	jr .skip_orig_block
+	
+.store_orig_block:
 	push hl
 		ld a, b
 		cpl
@@ -1317,6 +1311,7 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 		inc c
 	pop hl
 	
+.skip_orig_block:
 	add hl, de					;Get position that block will end up in after ramp
 		
 	ld a, h					;Store that position in both the block's data and
@@ -1363,7 +1358,7 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	ld c, e
 	
 	jp check_block_push_no_add
-		
+	
 .check_post_turn:
 	ld a, [turn_switch]					;If we have turned and there's a block after the turn, that means
 	or a								;we have another segment to push.
@@ -1373,6 +1368,11 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	ld [turn_switch], a
 	
 	call add_push_origins
+	
+;.action_hor:
+	;ld a, [action_dir_hor]
+	;cp $FE
+	;call z, turn_dir_neg
 	
 .check_ice:
 	ld a, [open_slide_spot]

@@ -32,6 +32,8 @@ load_game_data::
 	ld [total_segs_pushed], a	;;Must be init to 0 since we use it to determine if a push is happening
 	ld [turn_switch], a
 	ld [visited_ind], a
+	ld [action_dir_vert], a
+	ld [action_dir_hor], a
 	
 	ld d, 4
 	ld hl, ICE_MEM_START
