@@ -227,21 +227,22 @@ level_to_pal_5:
 ;hl comes with map addr of top-left tile
 ;a comes with pal index val
 set_block_pal::	
-	push af
-		call VBK_On
-	pop af
-	call lcd_wait
-	ldi [hl], a
-	ld [hl], a
-	ld b, a
-	ld a, 31
-	call add_a_to_hl
-	ld a, b
-	call lcd_wait
-	ldi [hl], a
-	ld [hl], a
-	call VBK_Off
-	
+	push hl
+		push af
+			call VBK_On
+		pop af
+		call lcd_wait
+		ldi [hl], a
+		ld [hl], a
+		ld b, a
+		ld a, 31
+		call add_a_to_hl
+		ld a, b
+		call lcd_wait
+		ldi [hl], a
+		ld [hl], a
+		call VBK_Off
+	pop hl
 	ret
 
 ; White, light gray, dark gray, Black

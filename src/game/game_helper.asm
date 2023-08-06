@@ -290,9 +290,7 @@ rem_ramping_blocks::					;Removes block that is ramping
 		inc e
 		
 		ld a, 0
-		push hl
-			call set_block_pal
-		pop hl
+		call set_block_pal
 		
 		call lcd_wait
 		ld a, [hl]
@@ -379,9 +377,7 @@ ret_ramping_blocks::					;Placing a ramping block in its new position
 		;inc e						;
 		
 		ld a, [de]
-		push hl
-			call set_block_pal
-		pop hl
+		call set_block_pal
 		inc e
 		
 		ld a, [de]
@@ -512,11 +508,7 @@ turn_dir_neg::
 	ret
 	
 pushing_ramp:
-	sub RAMP_TILE_MIN
-	sra a
-	ld de, BR_ACTION_DIRS
-	add e
-	ld e, a
+	call get_action_dirs
 	ld a, [de]
 	ld [action_dir_vert], a
 	inc e
@@ -539,73 +531,92 @@ turn_dir_2::
 	
 		ld a, [push_tile]
 		cp d
-		jr nz, .rampable_neg
-		
-.rampable_neg:
+		jr z, .rampable
 		cp e
 		jr nz, .not_rampable
-		
-.not_rampable:
-	
-;WORK ON THIS FURTHER, ACCORDING TO TXT DOC
-store_turning_block_2:
-	ld a, [turn_switch]
-	or a
-	jr z, .first_turn
-	ld a, [ramping_blocks_ind]
-	sub 11
-	ld [ramping_blocks_ind], a
-	
-.first_turn:
-	push bc								;Storing $FF in position of ramp so we know not to animate it
-		ld bc, ramping_blocks
-		ld a, [ramping_blocks_ind]
-		add c
-		ld c, a
-		ld a, $FF
-		ld [bc], a
-		inc c
-		ld [bc], a
+.rampable:
+		call get_action_dirs
+		ld a, c
+		add e
+		ld e, a
+		jr nc, .nc
+		inc d
+.nc:
+		ld a, [de]
+		cp b
+		jr nz, .opposite
+		xor a
+		ld [action_dir_vert], a
 	pop bc
 	
-	ld a, [turn_switch]
-	or a
-	jr z, .store_orig_block
+	add hl, bc							;Move to next block here, since we are jp to check_block_push_no_add
+	ld a, [blocks_pushed]
+	inc a
+	ld [blocks_pushed], a
+	ret
+		
+.opposite:
+		ld de, block_10					;WOOD BLOCK, subject to change
+		call replace_block
+		ld a, 1
+		call set_block_pal
+	pop bc
+	ld a, b
+	cpl
+	ld b, a
+	ld a, c
+	cpl
+	inc a
+	ld c, a
+	add hl, bc	
+	ld de, block_00						;EMPTY BLOCK, subject to change
+	call replace_block
+	
+	ld a, [blocks_pushed]
+	dec a
+	ld [blocks_pushed], a
+	xor a
+	ld [action_dir_vert], a
+	ld a, $FF							;ld a with FF to say we need to jp to start_block_push
+	ret
+	
+.not_rampable:
+	ld d, 0
+	ld e, b
+	ld a, b
+	cp $C0
+	jr c, .pos
+	ld d, $FF
+.pos:
+	pop bc
+	
+store_turning_block_2:
+	;Storing $FF in position of ramp so we know not to animate it
+	ld bc, ramping_blocks
+	ld a, [ramping_blocks_ind]
+	add c
+	ld c, a
+	ld a, $FF
+	ld [bc], a
+	inc c
+	ld [bc], a
+	inc c
+	
+	ld a, h					;Store that position
+	ld [bc], a
+	inc c
+	ld a, l
+	ld [bc], a
+	inc c
+	
+.skip_orig_block:
+	add hl, de					;Get position that block will end up in after ramp
+		
 	ld bc, ramping_blocks
 	ld a, [ramping_blocks_ind]
 	add 4
 	add c
 	ld c, a
-	jr .skip_orig_block
-	
-.store_orig_block:
-	push hl
-		ld a, b
-		cpl
-		ld b, a
-		ld a, c
-		cpl
-		inc a
-		ld c, a
-		add hl, bc				;Get position of block being pushed into the ramp
-
-		ld bc, ramping_blocks
-		ld a, [ramping_blocks_ind]
-		add 2
-		add c
-		ld c, a
-		
-		ld a, h					;Store that position
-		ld [bc], a
-		inc c
-		ld a, l
-		ld [bc], a
-		inc c
-	pop hl
-	
-.skip_orig_block:
-	add hl, de					;Get position that block will end up in after ramp
-		
 	ld a, h					;Store that position in both the block's data and
 	ld [bc], a				;as the starting point of the next push
 	inc c
@@ -617,19 +628,20 @@ store_turning_block_2:
 	add 11
 	ld [ramping_blocks_ind], a
 	
-	ld a, [turn_switch]			;If we're ramping into another ramp, there's, certainly no new seg to add.
-	or a
-	jr nz, .no_push
+	;ld a, [turn_switch]			;If we're ramping into another ramp, there's, certainly no new seg to add.
+	;or a
+	;jr nz, .no_push
 	
 	ld a, [total_segs_pushed]	;Storing and resetting (?) blocks_pushed.
 	ld bc, blocks_pushed_arr
 	add c
 	ld c, a
 	ld a, [blocks_pushed]
-	sub 2
-	jr z, .no_push
+	;sub 2
+	;or a
+	;jr z, .no_push
 	
-	inc a						;If there is an actual segment to push, increment these vars
+	;inc a						;If there is an actual segment to push, increment these vars
 	ld [bc], a	
 	ld a, [total_segs_pushed]
 	inc a
@@ -639,9 +651,10 @@ store_turning_block_2:
 	add 4
 	ld [push_origins_ind], a
 	
-.no_push:						;In the case that the only block we are pushing is ramping, 
+;.no_push:						;In the case that the only block we are pushing is ramping, 
 	xor a						;there's no call to block_push_loop needed
 	ld [blocks_pushed], a
+	ld [action_dir_vert], a
 	
 	ld a, 1
 	ld [turn_switch], a
@@ -649,10 +662,50 @@ store_turning_block_2:
 	ld b, d
 	ld c, e
 	
-	jp check_block_push_no_add
+	ld a, c
+.check_up:
+	cp UP_PUSH
+	jr nz, .check_down
+	ld a, RAMP_TL_TILE
+	ld [rampable_3], a
+	ld a, RAMP_TR_TILE
+	ld [rampable_4], a
+	ret
+.check_down:
+	cp DOWN_PUSH
+	jr nz, .check_right
+	ld a, RAMP_BL_TILE
+	ld [rampable_3], a
+	ld a, RAMP_BR_TILE
+	ld [rampable_4], a
+	ret
+.check_right:
+	cp RIGHT_PUSH
+	jr nz, .check_left
+	ld a, RAMP_TR_TILE
+	ld [rampable_3], a
+	ld a, RAMP_BR_TILE
+	ld [rampable_4], a
+	ret
+.check_left:
+	ld a, RAMP_BL_TILE
+	ld [rampable_3], a
+	ld a, RAMP_TL_TILE
+	ld [rampable_4], a
+	ret
 	
 	
+;Given the ramp's tile number, returns with de holding corresponding addr of action dir vals
+;Destroys de
+get_action_dirs::
+	sub RAMP_TILE_MIN
+	sra a
+	ld de, BR_ACTION_DIRS
+	add e
+	ld e, a
+	ret
 	
+
 ;A ramp's action directions are the two directions which it's ramp half are facing and, if pushed in an action direction, 
 ;have the potential to ramp what it's being pushed into (or get combined with another ramp).
 ;If pushed in an action direction (Ex: UP) into a ramp where only its corresponding action direction is opposite (Ex: DOWN), no
@@ -666,4 +719,3 @@ TR_ACTION_DIRS::
 	DB DOWN_PUSH, LEFT_PUSH
 TL_ACTION_DIRS::
 	DB DOWN_PUSH, RIGHT_PUSH
-

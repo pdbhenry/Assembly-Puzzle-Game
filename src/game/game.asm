@@ -1178,14 +1178,14 @@ moving_check_above_3:						;For rocketing to jump to
 	inc e						;ice_block_lo
 	ld a, l
 	ld [de], a
-	jr moving_check_above_4
+	jr moving_check_above_ramp
 	
 moving_check_above_3_no_ice:
 	pop af
 	cp IMPASSABLE_TILE
 	jp z, reset_move
 	cp SOIL_TILE
-	jr nz, moving_check_above_4
+	jr nz, moving_check_above_ramp
 	
 	push bc							;Preserve bc vals from moving_check_above
 		call destroy_soil			;for get_sticky_dir
@@ -1196,6 +1196,31 @@ moving_check_above_3_no_ice:
 	jp begin_move
 	
 
+moving_check_above_ramp:
+	cp RAMP_TILE_MIN					;Making sure curr block is a ramp. If not, skip past this.
+	jp c, moving_check_above_4
+	cp RAMP_TILE_MAX
+	jp nc, moving_check_above_4
+	
+	ld d, a
+	ld a, [rampable_3]
+	cp d
+	jr nz, .ramp_neg
+	
+.ramp_neg:
+	ld a, [rampable_4]
+	cp d
+	jr nz, .not_rampable
+	
+.not_rampable:
+	ld a, d
+	call get_action_dirs
+	ld a, [de]
+	ld [action_dir_vert], a
+	inc e
+	ld a, [de]
+	ld [action_dir_hor], a	
+	
 moving_check_above_4:
 	call add_push_origins
 	
@@ -1242,7 +1267,7 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	
 	ld a, [action_dir_vert]
 	or a
-	call nz, turn_dir_2
+	jp nz, .ramp_to_block
 	
 	ld a, [push_tile]
 	
@@ -1358,6 +1383,13 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	ld c, e
 	
 	jp check_block_push_no_add
+	
+;In the case that, instead of a block being pushed into a ramp, a ramp is pushed into a block
+.ramp_to_block:
+	call turn_dir_2
+	cp $FF
+	jp nz, check_block_push_no_add
+	jp start_block_push
 	
 .check_post_turn:
 	ld a, [turn_switch]					;If we have turned and there's a block after the turn, that means

@@ -2,7 +2,7 @@
 ;Top-left, top-right, bottom-left, bottom-right
 SECTION "block tiles", ROMX
 
-block_00:
+block_00::
 DB $0,$0,$2,$2
 block_01:
 DB $0,$1,$2,$3
@@ -39,7 +39,7 @@ block_0E:
 DB $16,$17,$18,$19
 block_0F:
 DB $1A,$1B,$1C,$1D
-block_10:
+block_10::
 DB $1E,$1F,$20,$21
 block_11:
 DB $22,$23,$20,$21
