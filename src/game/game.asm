@@ -14,6 +14,8 @@ move_xy:: DW				;Byte 1 is spr_x change per frame and byte 2 is spr_y change
 move_xy_old:: DW				;Holds original movement of input before altered by a ramp
 move_diag_down:: DB			;Holds the value spr_x or spr_y would change by to move diagonally.
 moved:: DB					;If set, we have moved this frame. Used to facilitate smooth movement each frame
+moving_arr:: DS 6
+moving_arr_ind:: DB
 dest_tile_addr:: DW 		;Holds the tile address that goblin is actively moving to
 curr_level_addr_hi:: DB
 curr_level_addr_lo:: DB
@@ -299,7 +301,9 @@ check_collision:
 	ld a, [hl]
 	
 	cp PASSABLE_TILE	
-	jp c, check_collision_2
+	jr c, check_collision_2
+	cp FRAME_TILE
+	jr z, check_collision_2
 	ld b, a
 	ld a, [rampable_1]
 	cp b
@@ -313,40 +317,6 @@ check_collision:
 check_collision_2:
 	ld a, [facing_temp]
 	ld [facing], a
-	
-
-;check_ramp_below:
-;	push hl
-;		ld a, [block_below]
-;		ld b, a
-;		ld a, [block_below+1]
-;		ld c, a
-;		add hl, bc
-;		call lcd_wait
-;		ld a, [hl]
-;		ld b, a
-;		ld a, [rampable_2]
-;		cp b
-;		jr nz, pre_begin_move
-;		
-;		ld a, [block_front]
-;		ld b, a
-;		ld a, [block_front+1]
-;		ld c, a
-;		add hl, bc
-;		call lcd_wait
-;		ld a, [hl]
-;		cp PASSABLE_TILE
-;		jr nc, pre_begin_move
-;	
-;		call use_ramp				;Sets destination tile, player_x/y, spr_x/y, and stops moving
-;		ld a, [move_xy]				;Whichever is set to 0 (x or y), needs to be set to move_diag_down
-;		or a
-;		ld a, [move_diag_down]
-;		jr nz, .move_y
-;		ld [move_xy], a
-;.move_y:
-;		ld [move_xy+1], a
 	
 pre_begin_move:
 	;pop hl
@@ -864,8 +834,12 @@ moving_check_below_2:
 	jp begin_move
 	
 moving_check_below_3:
+	cp FRAME_TILE
+	jr z, .fall
 	cp PASSABLE_TILE
-	jp nc, moving_check_below_ramp
+	jr nc, moving_check_below_ramp
+	
+.fall:
 	ld a, 1
 	ld [falling], a
 	jp begin_move
@@ -1027,13 +1001,14 @@ reset_player_pos:
 	
 ;If d is non-zero, this function is being called for rocketing purposes
 moving_check_above:
+	;call project_jump_or_fall
 	ld b, 0
 	ld a, [ori]
 	cp 0
 	jr nz, moving_check_above_up		;Sort by orientation
 	
 	ld a, [player_y]
-	add d								;If d is non-zero, we'll offset a's val and not 	
+	;add d								;If d is non-zero, we'll offset a's val and not 	
 	or a								;worry about finishing move
 	jp z, finish_move					;Check if on edge of bounds
 	
@@ -1062,7 +1037,7 @@ moving_check_above_up:
 	jr nz, moving_check_above_right
 	
 	ld a, [player_y]
-	add d
+	;add d
 	cp 8
 	jp z, finish_move
 	
@@ -1091,7 +1066,7 @@ moving_check_above_right:
 	jr nz, moving_check_above_left
 	
 	ld a, [player_x]
-	add d
+	;add d
 	or a
 	jp z, finish_move
 	
@@ -1119,7 +1094,7 @@ moving_check_above_right:
 	jr moving_check_above_2
 moving_check_above_left:
 	ld a, [player_x]
-	add d
+	;add d
 	cp 9
 	jp z, finish_move
 	
@@ -1145,15 +1120,20 @@ moving_check_above_left:
 	ld [ramp_front], a
 
 moving_check_above_2:
-	ld a, d				;If d is non-zero, ret
-	or a
-	ret nz
+	;ld a, d									;If d is non-zero, ret (callable function)
+	;or a
+	;ret nz
 	
 	call lcd_wait
 	ld a, [hl]
+	cp FRAME_TILE
+	jr z, .frame
 	cp PASSABLE_TILE
 	jp nc, moving_check_above_3
-	
+	jr .jump
+.frame:
+	;call lower_priority					;Possibly used later
+.jump:
 	ld a, [slime_block_hi]					;If we aren't pushing, we still need
 	or a									;to find next_line and adj_tile
 	call nz, get_sticky_dir					;values if slime stick is happening

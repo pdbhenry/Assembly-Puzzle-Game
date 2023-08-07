@@ -768,6 +768,7 @@ menu_page_2_render_map_loop_nc:
 
 ;hl is source, de is destination, bc is size
 render_map_memcpy:
+	call lcd_wait
 	ldi a, [hl]
 	cp GOAL_16					;CHANGE TO BLOCK VALS, NOT TILE
 	jr z, render_map_goal

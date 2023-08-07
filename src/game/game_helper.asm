@@ -466,46 +466,9 @@ add_visited_end:
 ;bc holds direction of push
 ;de hold rampable_3/4
 turn_dir::
-	cp d								;If a==d, we are ramping in a positive direction
-	jr nz, turn_dir_neg
-
-turn_dir_pos::
-	ld a, RAMP_BR_TILE					;Setting ramps that would turn a block in the new direction we're headed
-	ld [rampable_4], a
-	
-	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
-	jr z, .pos_ramp_64					;turning right by ramp (since we know we're ramping positively)
-	ld de, 64							;If jumping right/left, we are turning down since we're ramping
-	ld a, RAMP_BL_TILE					;positively
-	ld [rampable_3], a
-	ret									;Originally "jr .store_turning_block"
-		
-.pos_ramp_64:
-	ld de, 2
-	ld a, RAMP_TR_TILE
-	ld [rampable_3], a
-	ret
-		
-turn_dir_neg::
-	cp e
-	jp nz, pushing_ramp				;We've determined curr block is a ramp, but not one where the slope is facing
-										;the dir of the push, so it is getting pushed.
-	ld a, RAMP_TL_TILE
-	ld [rampable_3], a
-
-	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
-	jr z, .neg_ramp_64					;turning right by ramp (since we know we're ramping positively)
-;
-	ld de, -64							;If jumping right/left, we are turning down since we're ramping positively
-	ld a, RAMP_TR_TILE
-	ld [rampable_4], a
-	ret
-		
-.neg_ramp_64:
-	ld de, -2
-	ld a, RAMP_BL_TILE
-	ld [rampable_4], a
-	ret
+	call turn_dir_helper
+	cp d
+	ret nz
 	
 pushing_ramp:
 	call get_action_dirs
@@ -545,6 +508,8 @@ turn_dir_2::
 		ld a, [de]
 		cp b
 		jr nz, .opposite
+;In this case, ramps are opposite only on one axis (Ex: TL into TR |/ -> \|)
+;Neither will ramp, they'll just push like blocks
 		xor a
 		ld [action_dir_vert], a
 	pop bc
@@ -554,7 +519,9 @@ turn_dir_2::
 	inc a
 	ld [blocks_pushed], a
 	ret
-		
+	
+;In the case the complete opposite ramps are pushed into each other (Ex: TL into BR |/ -> /|)
+;They will just combine into a standard wood block. The push ends there
 .opposite:
 		ld de, block_10					;WOOD BLOCK, subject to change
 		call replace_block
@@ -580,6 +547,8 @@ turn_dir_2::
 	ld a, $FF							;ld a with FF to say we need to jp to start_block_push
 	ret
 	
+;In the case that we are pushing a ramp into a block or a ramp that is not rampable from this dir,
+;we need the pushed ramp to turn this current block/ramp
 .not_rampable:
 	ld d, 0
 	ld e, b
@@ -628,20 +597,12 @@ store_turning_block_2:
 	add 11
 	ld [ramping_blocks_ind], a
 	
-	;ld a, [turn_switch]			;If we're ramping into another ramp, there's, certainly no new seg to add.
-	;or a
-	;jr nz, .no_push
-	
 	ld a, [total_segs_pushed]	;Storing and resetting (?) blocks_pushed.
 	ld bc, blocks_pushed_arr
 	add c
 	ld c, a
 	ld a, [blocks_pushed]
-	;sub 2
-	;or a
-	;jr z, .no_push
 	
-	;inc a						;If there is an actual segment to push, increment these vars
 	ld [bc], a	
 	ld a, [total_segs_pushed]
 	inc a
@@ -650,9 +611,8 @@ store_turning_block_2:
 	ld a, [push_origins_ind]
 	add 4
 	ld [push_origins_ind], a
-	
-;.no_push:						;In the case that the only block we are pushing is ramping, 
-	xor a						;there's no call to block_push_loop needed
+		
+	xor a						
 	ld [blocks_pushed], a
 	ld [action_dir_vert], a
 	
@@ -705,7 +665,198 @@ get_action_dirs::
 	ld e, a
 	ret
 	
+	
+	
+	
+turn_dir_helper::
+	cp d								;If a==d, we are ramping in a positive direction
+	jr nz, turn_dir_neg
 
+turn_dir_pos::
+	ld a, RAMP_BR_TILE					;Setting ramps that would turn a block in the new direction we're headed
+	ld [rampable_4], a
+	
+	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
+	jr z, .pos_ramp_64					;turning right by ramp (since we know we're ramping positively)
+	ld de, 64							;If jumping right/left, we are turning down since we're ramping
+	ld a, RAMP_BL_TILE					;positively
+	ld [rampable_3], a
+	ret									;Originally "jr .store_turning_block"
+		
+.pos_ramp_64:
+	ld de, 2
+	ld a, RAMP_TR_TILE
+	ld [rampable_3], a
+	ret
+		
+turn_dir_neg::
+	cp e
+	jp z, .cont						;We've determined curr block is a ramp, but not one where the slope is facing
+	ld d, a							;the dir of the push, so it is getting pushed. ld d, a as a way to check this
+	ret								;specific ret
+	
+.cont:
+	ld a, RAMP_TL_TILE
+	ld [rampable_3], a
+
+	bit 1, c							;If bit 1,c==0, we are jumping down/up and thus must be
+	jr z, .neg_ramp_64					;turning right by ramp (since we know we're ramping positively)
+;
+	ld de, -64							;If jumping right/left, we are turning down since we're ramping positively
+	ld a, RAMP_TR_TILE
+	ld [rampable_4], a
+	ret
+		
+.neg_ramp_64:
+	ld de, -2
+	ld a, RAMP_BL_TILE
+	ld [rampable_4], a
+	ret
+
+
+
+;Before a jump or fall occurs, we check if it's valid. For example, if Sirloin would jump, get turned by multiple ramps,
+;and hit a block that can't be pushed, the jump shouldn't go through (maybe we would animate it down the road).
+;If valid, we fill out the spr anims in moving_arr.
+project_jump_or_fall::
+	push hl
+	ld de, moving_arr
+	xor a						;Vertical jump is indicated by 0 at first ind of moving_arr
+	ld [de], a
+	inc e
+	ld a, -16
+	ld [de], a
+	ld a, 2
+	ld [moving_arr_ind], a
+	
+	ld a, [ori]
+	or a
+	jr nz, .up
+	ld bc, -64
+	ld a, RAMP_TL_TILE
+	ld [rampable_3], a					
+	ld a, RAMP_TR_TILE	
+	ld [rampable_4], a
+	ld a, [new_player_y]
+	dec a
+	;ld [new_player_y], a
+	jr .loop
+.up:
+	cp 1
+	jr nz, .right
+	ld bc, 64
+	ld a, RAMP_BL_TILE
+	ld [rampable_3], a					
+	ld a, RAMP_BR_TILE	
+	ld [rampable_4], a
+	ld a, 16
+	ld [de], a
+	ld a, [new_player_y]
+	inc a
+	;ld [new_player_y], a
+	jr .loop
+.right:
+	cp 2
+	ld a, 1						;Horizontal jump is indicated by 1 at first ind of moving_arr
+	ld [de], a
+	jr nz, .left
+	ld bc, 2
+	ld a, RAMP_TR_TILE
+	ld [rampable_3], a					
+	ld a, RAMP_BR_TILE	
+	ld [rampable_4], a
+	ld a, [new_player_x]
+	inc a
+	;ld [new_player_x], a
+	jr .loop
+.left:
+	ld bc, -2
+	ld a, RAMP_TL_TILE
+	ld [rampable_3], a					
+	ld a, RAMP_BL_TILE	
+	ld [rampable_4], a
+	ld a, 16
+	ld [de], a
+	ld a, [new_player_x]
+	dec a
+	;ld [new_player_x], a
+	
+.loop:
+	add hl, bc
+	call lcd_wait
+	ld a, [hl]
+	
+	cp RAMP_TILE_MIN					;Making sure curr block is a ramp. If not, skip past this.
+	jp c, .not_rampable
+	cp RAMP_TILE_MAX
+	jp nc, .not_rampable
+
+	ld b, a
+	ld a, [rampable_3]
+	ld d, a
+	ld a, [rampable_4]
+	ld e, a	
+	ld a, b
+	
+	call turn_dir_helper
+	cp d								;Special case of turn_dir_helper
+	jr z, .not_rampable
+	
+	ld a, e
+	bit 1, a
+	ld b, d
+	ld c, e
+	jr z, .dir_64	
+	sla a								;If 2/-2, multiply by 8 to get 16/-16 sprite move
+	sla a
+	sla a
+	ld de, moving_arr
+	push af
+	ld a, [moving_arr_ind]
+	add e
+	ld e, a
+	pop af
+	ld [de], a
+	bit 7, a
+	ld a, [new_player_x]
+	jr nz, .neg_2
+	inc a
+	jr .dir_2_cont
+.neg_2:
+	dec a
+.dir_2_cont:
+	;ld [new_player_x], a
+	jp .loop
+	
+.dir_64:	
+	sra a								;If 64/-64, divide by 4 to get 16/-16 sprite move
+	sra a
+	push af
+	ld a, [moving_arr_ind]
+	add e
+	ld e, a
+	pop af
+	ld [de], a
+	bit 7, a
+	ld a, [new_player_y]
+	jr nz, .neg_64
+	dec a
+	jr .dir_64_cont
+.neg_64:
+	inc a
+.dir_64_cont
+	;ld [new_player_y], a
+	jp .loop
+	
+	
+.not_rampable:
+	pop hl
+	cp PASSABLE_TILE
+	jr c, .finish_projection
+	
+.finish_projection:
+	ret
+	
 ;A ramp's action directions are the two directions which it's ramp half are facing and, if pushed in an action direction, 
 ;have the potential to ramp what it's being pushed into (or get combined with another ramp).
 ;If pushed in an action direction (Ex: UP) into a ramp where only its corresponding action direction is opposite (Ex: DOWN), no

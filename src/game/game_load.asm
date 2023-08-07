@@ -223,7 +223,10 @@ load_game_map:
 		jr c, load_game_map_bg		; If we're dealing with wood blocks
 		ld [hl], 1					; (vals 7 and onward), use palette 1
 		cp $1A
+		jr z, load_game_map_steel
+		cp $28
 		jr nz, load_game_map_loose
+load_game_map_steel:
 		ld [hl], STEEL_PAL
 load_game_map_loose:
 		cp $1B						

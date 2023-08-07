@@ -29,10 +29,10 @@ FROST_ANIM_ID		equ 1
 FLAME_ANIM_ID		equ 2
 EARTH_ANIM_ID		equ 3	
 
-FROST_ANIM_TILE		equ $2401
-FLAME_ANIM_TILE		equ $2802
-EARTH_ANIM_TILE		equ $3002	
-SOIL_ANIM_TILE		equ $2C03	
+;FROST_ANIM_TILE		equ $2401
+;FLAME_ANIM_TILE		equ $2802
+;EARTH_ANIM_TILE		equ $3002	
+;SOIL_ANIM_PAL		equ $2C03	
 
 
 SECTION "sprite_anims", ROM0
@@ -367,7 +367,8 @@ create_frost_anim::
 	ldi [hl], a			;anim_step
 	ld [hl], a			;anim_delay
 	
-	ld bc, FROST_ANIM_TILE		;b (sprite #) is $14, c (palette) is 1 for frost
+	ld b, FROST_ANIM_TILE		;b (sprite #) is $14, c (palette) is 1 for frost
+	ld c, FROST_SPR_PAL
 	call setup_anim_sprite
 	
 	ld a, 1
@@ -401,7 +402,8 @@ create_flame_anim::
 	ldi [hl], a			;anim_step
 	ld [hl], a			;anim_delay
 	
-	ld bc, FLAME_ANIM_TILE		;b (sprite #) is $14, c (palette)
+	ld b, FLAME_ANIM_TILE		;b (sprite #) is $14, c (palette)
+	ld c, FLAME_SPR_PAL
 	call setup_anim_sprite
 	
 	ld a, 1
@@ -445,7 +447,8 @@ create_earth_anim::
 	ldi [hl], a
 	ld [hl], a
 	
-	ld bc, EARTH_ANIM_TILE
+	ld b, EARTH_ANIM_TILE
+	ld c, EARTH_SPR_PAL
 	call setup_anim_sprite
 	
 	ret
@@ -475,7 +478,8 @@ create_soil_anim::
 	ldi [hl], a			;anim_step
 	ld [hl], a			;anim_delay
 	
-	ld bc, SOIL_ANIM_TILE
+	ld b, SOIL_ANIM_TILE
+	ld c, SOIL_SPR_PAL
 	call setup_anim_sprite
 	ret
 	

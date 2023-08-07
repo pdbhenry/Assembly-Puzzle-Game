@@ -125,8 +125,8 @@ change_sprite_down_right:				;Setting sprite tile order & attribs.
 	or a
 	jp nz, change_sprite_corner_down_right
 	
-	ld b, 0
-	ld c, 2
+	ld b, SIR_TL
+	ld c, SIR_BL
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
@@ -137,8 +137,8 @@ change_sprite_down_left:
 	or a
 	jp nz, change_sprite_corner_down_left
 	
-	ld b, 1
-	ld c, 3
+	ld b, SIR_TR
+	ld c, SIR_BR
 	ld d, -1
 	ld e, %00100000
 	ld a, h
@@ -151,8 +151,8 @@ change_sprite_up_right:
 	or a
 	jp nz, change_sprite_corner_up_right
 	
-	ld b, 2
-	ld c, 0
+	ld b, SIR_BL
+	ld c, SIR_TL
 	ld e, %01000000
 	ld a, h
 	cp 0
@@ -164,8 +164,8 @@ change_sprite_up_left:
 	or a
 	jp nz, change_sprite_corner_up_left
 	
-	ld b, 3
-	ld c, 1
+	ld b, SIR_BR
+	ld c, SIR_TR
 	ld d, -1
 	ld e, %01100000
 	ld a, h
@@ -178,8 +178,8 @@ change_sprite_right_up:
 	or a
 	jp nz, change_sprite_corner_right_up
 	
-	ld b, 6
-	ld c, 8
+	ld b, SIR_SIDE_TL
+	ld c, SIR_SIDE_BL
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
@@ -190,8 +190,8 @@ change_sprite_right_down:
 	or a
 	jp nz, change_sprite_corner_right_down
 	
-	ld b, 8
-	ld c, 6
+	ld b, SIR_SIDE_BL
+	ld c, SIR_SIDE_TL
 	ld e, %01000000
 	ld a, h
 	cp 0
@@ -203,8 +203,8 @@ change_sprite_left_up:
 	or a
 	jp nz, change_sprite_corner_left_up
 	
-	ld b, 7
-	ld c, 9
+	ld b, SIR_SIDE_TR
+	ld c, SIR_SIDE_BR
 	ld d, -1
 	ld e, %00100000
 	ld a, h
@@ -219,8 +219,8 @@ change_sprite_left_down:
 	or a
 	jp nz, change_sprite_corner_left_down
 	
-	ld b, 9
-	ld c, 7
+	ld b, SIR_SIDE_BR
+	ld c, SIR_SIDE_TR
 	ld d, -1
 	ld e, %01100000
 	ld a, h
@@ -278,6 +278,10 @@ change_sprite_2:
 	ld hl, $C402
 	ld a, b
 	ldi [hl], a
+	;ld a, [hl]						;Keeping priority
+	;and %10000000
+	;or e
+	;ld e, a
 	ld [hl], e
 	
 	add a, d
@@ -297,7 +301,7 @@ change_sprite_2:
 	cp -4
 	jr z, inc_tile_num_step
 	jr change_sprite_3
-dec_tile_num_step:					;Not proud of this. Jank way to handle left/right orientation
+dec_tile_num_step:					;Jank way to handle left/right orientation
 	dec a							;weirdness. Look at spriteNotes.txt to see the
 	jr change_sprite_3				;non-constant left orientation number jumps when walking.
 inc_tile_num_step:					;Jump -3 then -4, or -4 then -3
@@ -487,4 +491,64 @@ change_goblin_pal_earth:
 	
 change_goblin_pal_fin:
 	call SetGBCPalettes
+	ret
+	
+	
+;----------------------------------------------------------------------------
+
+;If a sprite's priority is lowered, they are only visible when overlapping BG tiles'
+;first color. This could be used to make the frame of frame blocks only overlap Sirloin.
+lower_priority::
+	push hl
+		ld d, %10000000
+		ld hl, $C403
+		ld a, [hl]
+		or d
+		ld [hl], a
+		
+		ld hl, $C407
+		ld a, [hl]
+		or d
+		ld [hl], a
+
+		ld hl, $C40B
+		ld a, [hl]
+		or d
+		ld [hl], a
+
+		ld hl, $C40F
+		ld a, [hl]
+		or d
+		ld [hl], a
+	pop hl
+	ret
+
+
+;----------------------------------------------------------------------------
+
+
+raise_priority::
+	push hl
+		ld d, %01111111
+		ld hl, $C403
+		ld a, [hl]
+		and d
+		ld [hl], a
+		
+		ld hl, $C407
+		ld a, [hl]
+		and d
+		ld [hl], a
+
+		ld hl, $C40B
+		ld a, [hl]
+		and d
+		ld [hl], a
+
+		ld hl, $C40F
+		ld a, [hl]
+		and d
+		ld [hl], a
+	pop hl
+	
 	ret

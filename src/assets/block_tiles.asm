@@ -87,6 +87,8 @@ block_26:
 DB $3D,$3E,$3F,$40
 block_27:
 DB $41,$42,$43,$44
+block_28:
+DB $55,$56,$57,$58
 	
 blocks::
 	DW block_00, block_01, block_02, block_03, block_04, block_05, block_06
@@ -94,4 +96,4 @@ blocks::
 	DW block_0E, block_0F, block_10, block_11, block_12, block_13, block_14
 	DW block_15, block_16, block_17, block_18, block_19, block_1A, block_1B
 	DW block_1C, block_1D, block_1E, block_1F, block_20, block_21, block_22
-	DW block_23, block_24, block_25, block_26, block_27
+	DW block_23, block_24, block_25, block_26, block_27, block_28
