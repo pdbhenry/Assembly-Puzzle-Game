@@ -2,7 +2,7 @@ SECTION "game_load", ROM0
 
 include "include/gb/constants.inc"
 
-load_game_data::
+load_game_data::	
 	xor a
 	ld [fade_state], a
 	ld [ori], a
@@ -27,6 +27,7 @@ load_game_data::
 	ld [slimed_lo], a
 	ld [casting], a
 	ld [earth_casting], a
+	ld [ramping], a
 	ld [ramping_blocks_ind], a	;Must be init to 0 for ret_ramping_blocks to work
 	ld [push_origins_ind], a
 	ld [total_segs_pushed], a	;;Must be init to 0 since we use it to determine if a push is happening
@@ -35,8 +36,9 @@ load_game_data::
 	ld [action_dir_vert], a
 	ld [action_dir_hor], a
 	
+	
 	ld d, 4
-	ld hl, ICE_MEM_START
+	ld hl, ice_slide_space
 	ld bc, ICE_SLIDE_VARS
 load_game_data_slide_spots:		;Loop to set C2XX open_slide_spots to 0 
 	ld [hl], a
@@ -45,7 +47,7 @@ load_game_data_slide_spots:		;Loop to set C2XX open_slide_spots to 0
 	jr nz, load_game_data_slide_spots
 	
 	ld [ongoing_slides], a
-	ld a, ICE_MEM_START_LO		;$04 currently
+	ld a, LOW(ice_slide_space)	;ICE_MEM_START_LO		;$04 currently
 	ld [open_slide_spot], a
 	
 	;xor a
@@ -458,7 +460,7 @@ load_sprite_2::
 	ldi [hl], a 		;a register holds spr_y value
 	ld a, [spr_x]
 	ldi [hl], a 		;X
-	ld a, $00			;Tile Number
+	ld a, SIR_TL		;Tile Number
 	ldi [hl], a			
 	ld a,%00000000
 	ldi [hl], a
@@ -468,7 +470,7 @@ load_sprite_2::
 	ld a, [spr_x]
 	add 8
 	ldi [hl], a 		;X
-	ld a, $01			;Tile Number
+	ld a, SIR_TR		;Tile Number
 	ldi [hl], a			
 	ld a,%00000000
 	ldi [hl], a
@@ -478,7 +480,7 @@ load_sprite_2::
 	ldi [hl], a 		;Y
 	ld a, [spr_x]
 	ldi [hl], a 		;X
-	ld a, $02			;Tile Number
+	ld a, SIR_BL		;Tile Number
 	ldi [hl], a			
 	ld a,%00000000
 	ldi [hl], a
@@ -489,7 +491,7 @@ load_sprite_2::
 	ld a, [spr_x]
 	add 8
 	ldi [hl], a 		;X
-	ld a, $03			;Tile Number
+	ld a, SIR_BR		;Tile Number
 	ldi [hl], a			
 	ld a,%00000000
 	ldi [hl], a

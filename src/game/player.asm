@@ -130,7 +130,7 @@ change_sprite_down_right:				;Setting sprite tile order & attribs.
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
-	ld c, 4
+	ld c, SIR_WALK_BL
 	jp change_sprite_2
 change_sprite_down_left:
 	ld a, l
@@ -144,7 +144,7 @@ change_sprite_down_left:
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
-	ld c, 5
+	ld c, SIR_WALK_BR
 	jp change_sprite_2
 change_sprite_up_right:
 	ld a, l
@@ -157,7 +157,7 @@ change_sprite_up_right:
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
-	ld b, 4
+	ld b, SIR_WALK_BL
 	jp change_sprite_2
 change_sprite_up_left:
 	ld a, l
@@ -171,7 +171,7 @@ change_sprite_up_left:
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
-	ld b, 5
+	ld b, SIR_WALK_BR
 	jp change_sprite_2
 change_sprite_right_up:
 	ld a, l
@@ -210,8 +210,8 @@ change_sprite_left_up:
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
-	ld b, 10						;Tile $0A
-	ld c, 11						;Tile $0B
+	ld b, SIR_SIDE_WALK_TR			;Tile $0A
+	ld c, SIR_SIDE_WALK_BR			;Tile $0B
 	ld d, -4
 	jp change_sprite_2
 change_sprite_left_down:
@@ -226,51 +226,51 @@ change_sprite_left_down:
 	ld a, h
 	cp 0
 	jp z, change_sprite_2
-	ld b, 11
-	ld c, 10
+	ld b, SIR_SIDE_WALK_BR
+	ld c, SIR_SIDE_WALK_TR
 	ld d, -3
 	jp change_sprite_2
 	
 	
 change_sprite_corner_down_right:
-	ld b, $13
-	ld c, $11
+	ld b, SIR_SIDE_TURN_BR
+	ld c, SIR_SIDE_TURN_TR
 	ld d, -1
 	ld e, %01100000
 	jr change_sprite_2
 change_sprite_corner_down_left:
-	ld b, $12
-	ld c, $10
+	ld b, SIR_SIDE_TURN_BL
+	ld c, SIR_SIDE_TURN_TL
 	ld e, %01000000
 	jr change_sprite_2
 change_sprite_corner_up_right:
-	ld b, $11
-	ld c, $13
+	ld b, SIR_SIDE_TURN_TR
+	ld c, SIR_SIDE_TURN_BR
 	ld d, -1
 	ld e, %00100000
 	jr change_sprite_2
 change_sprite_corner_up_left:
-	ld b, $10
-	ld c, $12
+	ld b, SIR_SIDE_TURN_TL
+	ld c, SIR_SIDE_TURN_BL
 	jr change_sprite_2
 change_sprite_corner_right_up:
-	ld b, $0C
-	ld c, $0E
+	ld b, SIR_TURN_TL
+	ld c, SIR_TURN_BL	
 	jr change_sprite_2
 change_sprite_corner_right_down:
-	ld b, $0E
-	ld c, $0C
+	ld b, SIR_TURN_BL	
+	ld c, SIR_TURN_TL
 	ld e, %01000000 
 	jr change_sprite_2
 change_sprite_corner_left_up:
-	ld b, $0D
-	ld c, $0F
+	ld b, SIR_TURN_TR	
+	ld c, SIR_TURN_BR
 	ld d, -1
 	ld e, %00100000
 	jr change_sprite_2
 change_sprite_corner_left_down:
-	ld b, $0F
-	ld c, $0D
+	ld b, SIR_TURN_BR
+	ld c, SIR_TURN_TR
 	ld d, -1
 	ld e, %01100000
 	

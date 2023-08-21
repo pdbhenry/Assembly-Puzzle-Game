@@ -27,12 +27,7 @@ POWER_ANIMS			equ 4		;Anims with ID 1-3 are powers
 
 FROST_ANIM_ID		equ 1
 FLAME_ANIM_ID		equ 2
-EARTH_ANIM_ID		equ 3	
-
-;FROST_ANIM_TILE		equ $2401
-;FLAME_ANIM_TILE		equ $2802
-;EARTH_ANIM_TILE		equ $3002	
-;SOIL_ANIM_PAL		equ $2C03	
+EARTH_ANIM_ID		equ 3		
 
 
 SECTION "sprite_anims", ROM0
@@ -373,7 +368,7 @@ create_frost_anim::
 	
 	ld a, 1
 	ld [casting], a
-	ld h, $14
+	ld h, SIR_CAST_TL
 	call change_pose
 	ld hl, frost_sfx
 	call play_wave_adv_init
@@ -408,7 +403,7 @@ create_flame_anim::
 	
 	ld a, 1
 	ld [casting], a
-	ld h, $14
+	ld h, SIR_CAST_TL
 	call change_pose
 	ret
 	

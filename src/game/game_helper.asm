@@ -438,6 +438,8 @@ check_visited_loop:
 		ldi a, [hl]
 		cp e
 		jr nz, .no_match
+		;xor a
+		;ld [visited_ind], a
 		ld a, $FF
 		jr add_visited_end
 .no_match_inc:
@@ -719,6 +721,11 @@ turn_dir_neg::
 ;and hit a block that can't be pushed, the jump shouldn't go through (maybe we would animate it down the road).
 ;If valid, we fill out the spr anims in moving_arr.
 project_jump_or_fall::
+	ld a, [new_player_x]		;In case there's no ramps, we just have temps to revert
+	ld [temp], a				;new_player_x/y
+	ld a, [new_player_y]
+	ld [temp_2], a
+	
 	push hl
 	ld de, moving_arr
 	xor a						;Vertical jump is indicated by 0 at first ind of moving_arr
@@ -739,7 +746,7 @@ project_jump_or_fall::
 	ld [rampable_4], a
 	ld a, [new_player_y]
 	dec a
-	;ld [new_player_y], a
+	ld [new_player_y], a
 	jr .loop
 .up:
 	cp 1
@@ -753,7 +760,7 @@ project_jump_or_fall::
 	ld [de], a
 	ld a, [new_player_y]
 	inc a
-	;ld [new_player_y], a
+	ld [new_player_y], a
 	jr .loop
 .right:
 	cp 2
@@ -767,7 +774,7 @@ project_jump_or_fall::
 	ld [rampable_4], a
 	ld a, [new_player_x]
 	inc a
-	;ld [new_player_x], a
+	ld [new_player_x], a
 	jr .loop
 .left:
 	ld bc, -2
@@ -779,7 +786,7 @@ project_jump_or_fall::
 	ld [de], a
 	ld a, [new_player_x]
 	dec a
-	;ld [new_player_x], a
+	ld [new_player_x], a
 	
 .loop:
 	add hl, bc
@@ -812,48 +819,73 @@ project_jump_or_fall::
 	sla a
 	ld de, moving_arr
 	push af
-	ld a, [moving_arr_ind]
-	add e
-	ld e, a
+		ld a, [moving_arr_ind]
+		add e
+		ld e, a
 	pop af
 	ld [de], a
 	bit 7, a
 	ld a, [new_player_x]
+	ld [temp], a
 	jr nz, .neg_2
 	inc a
-	jr .dir_2_cont
+	ld [new_player_x], a
+	ld a, 3								;We are being pushed right by the ramp. If then ends in pushing a block,
+	ld [jump_ori], a					;it would be as if our orientation is left. Hence the val of 3 for push_ori
+	jp .inc
 .neg_2:
 	dec a
-.dir_2_cont:
-	;ld [new_player_x], a
-	jp .loop
+	ld [new_player_x], a
+	ld a, 2
+	ld [jump_ori], a					
+	jp .inc
 	
 .dir_64:	
 	sra a								;If 64/-64, divide by 4 to get 16/-16 sprite move
 	sra a
+	ld de, moving_arr
 	push af
-	ld a, [moving_arr_ind]
-	add e
-	ld e, a
+		ld a, [moving_arr_ind]
+		add e
+		ld e, a
 	pop af
 	ld [de], a
 	bit 7, a
 	ld a, [new_player_y]
+	ld [temp_2], a
 	jr nz, .neg_64
-	dec a
-	jr .dir_64_cont
-.neg_64:
 	inc a
-.dir_64_cont
-	;ld [new_player_y], a
+	ld [new_player_y], a
+	ld a, 1
+	ld [jump_ori], a
+	jr .inc
+.neg_64:
+	dec a
+	ld [new_player_y], a
+	ld a, 0
+	ld [jump_ori], a	
+	
+.inc:
+	ld a, [moving_arr_ind]
+	inc a
+	ld [moving_arr_ind], a
 	jp .loop
 	
 	
 .not_rampable:
 	pop hl
-	cp PASSABLE_TILE
-	jr c, .finish_projection
+	;cp PASSABLE_TILE
+	;jr c, .finish_projection
+	ld a, [temp]						;Back up our pos by one step, so we're at the last ramp
+	ld [new_player_x], a
+	ld a, [temp_2]
+	ld [new_player_y], a
 	
+	ld a, [moving_arr_ind]
+	cp 2
+	jr nz, .finish_projection
+	ld a, $FF							;If no ramping happened, ld push_ori with FF to show
+	ld [jump_ori], a					;that we are not jumping out of ramps
 .finish_projection:
 	ret
 	

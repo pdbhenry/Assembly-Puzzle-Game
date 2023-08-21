@@ -8,13 +8,14 @@ new_player_y:: DB
 spr_x:: DB
 spr_y:: DB
 ori:: DB 					;0=down, 1=up, 2=right, 3=left
+jump_ori:: DB
 moving:: DB					;if set, 0=down, 1=up, 2=right, 3=left; informs where the player is going (input or falling)
 moving_step:: DB
 move_xy:: DW				;Byte 1 is spr_x change per frame and byte 2 is spr_y change
 move_xy_old:: DW				;Holds original movement of input before altered by a ramp
 move_diag_down:: DB			;Holds the value spr_x or spr_y would change by to move diagonally.
 moved:: DB					;If set, we have moved this frame. Used to facilitate smooth movement each frame
-moving_arr:: DS 6
+moving_arr:: DS 12
 moving_arr_ind:: DB
 dest_tile_addr:: DW 		;Holds the tile address that goblin is actively moving to
 curr_level_addr_hi:: DB
@@ -22,7 +23,7 @@ curr_level_addr_lo:: DB
 falling:: DB				;If not zero, goblin is falling. Used for animation and to increase speed of move_anim
 facing:: DB					;Used for knowing where the character is facing
 blocks_pushed:: DB			;Stores # of blocks being pushed with a jump_check
-;blocks_pushed_2:: DB		;Stores the same val, but doesn't dec
+blocks_pushed_2:: DB		;Stores the same val, but doesn't dec
 tile_1:: DB					;4 tiles to make a 16x16 block. Used when pushing and loading the map
 tile_2:: DB					;From 1-4, tiles in order of top-left, top-right, bottom-left, bottom-right
 tile_3:: DB
@@ -46,9 +47,9 @@ power:: DB					;Curr power, dictates Gobbo's appearance & B-button functionality
 ;ice_block_hi:: DB			;Addr of first ice block in sequence to be pushed
 ;ice_block_lo:: DB
 ;ice_block_dest_hi:: DB		;Addr of where first ice block will end up after a slide
-;ice_block_dest_lo:: DB
+;ice_block_dest_lo:: DB		;Can remove dest
 ;ice_slide_count:: DB		;Tell if ice has slid a whole step or half
-;ice_slide_delay:: DB		;We don't want ice blocks to move 1 tile per frame so this slows it.
+;ice_slide_delay:: DB		;We don't want ice blocks to move 1 tile per frame so this slows it.			
 ;ice_block_next_line:: DB
 ;ice_block_adj_tile:: DB
 ;ice_block_slimed:: DB		;If non-zero, the last ice block is slimed
@@ -84,15 +85,10 @@ block_front:: DW			;16 bits to hold value that needs to be added to hl to get bl
 block_below:: DW			;(front and below depending on Sirloin's ori and face). Can get behind/above from these vals
 new_ori:: DB					;Holds val of possible ori change depending on where Sirloin is walking
 
-SECTION "game_vars_2", WRAM0[$C200]
-open_slide_spot:: DB		;Gives the low byte of C1XX addr of first 
-							;available spot for ice slide vars to be kept
-							;First set to C163
-ongoing_slides:: DB			;Val of how many lines of ice are sliding simultaneously
-slides_count:: DB			;# of lines of ice we have yet to process.
-curr_slide_spot:: DB
-ice_slide_space:: DB 		;Probably needs to be DS <big number>
+temp:: DB
+temp_2:: DB
 
+SECTION "game_vars_2", WRAM0[$C200]
 ramping_blocks_ind:: DB		;Holds index for array below (array currently supports up to 5 blocks (9 bytes * 5))
 push_origins_ind:: DB		;Ind for arr below. push_origins allows multiple pushes in one frame
 total_segs_pushed:: DB		;Ind for arr below
@@ -114,6 +110,13 @@ SECTION "game_vars_3", WRAM0[$C300]
 visited_ind:: DB
 visited:: DS 30				;Can push a max of 15 blocks currently
 		
+open_slide_spot:: DB		;Gives the low byte of C3XX addr of first 
+							;available spot for ice slide vars to be kept
+							;First set to C163
+ongoing_slides:: DB			;Val of how many lines of ice are sliding simultaneously
+slides_count:: DB			;# of lines of ice we have yet to process.
+curr_slide_spot:: DB
+ice_slide_space:: DS 40		;Probably needs to be DS <big number>
 		
 SECTION "game", ROM0
 
@@ -973,7 +976,7 @@ moving_step_stick:
 ;Now resets earth_making as well
 reset_ice_and_move:
 	;pop hl			;hl was pushed in moving_check_above_4
-	ld h, $C1
+	ld h, $C3
 	ld a, [open_slide_spot]
 	ld l, a
 	xor a
@@ -1001,13 +1004,20 @@ reset_player_pos:
 	
 ;If d is non-zero, this function is being called for rocketing purposes
 moving_check_above:
-	;call project_jump_or_fall
+	call project_jump_or_fall
 	ld b, 0
+	ld a, [jump_ori]
+	cp $FF
 	ld a, [ori]
+	jr z, .cont
+
+	call get_tile
+	
+.cont:
 	cp 0
 	jr nz, moving_check_above_up		;Sort by orientation
 	
-	ld a, [player_y]
+	ld a, [new_player_y]
 	;add d								;If d is non-zero, we'll offset a's val and not 	
 	or a								;worry about finishing move
 	jp z, finish_move					;Check if on edge of bounds
@@ -1036,7 +1046,7 @@ moving_check_above_up:
 	cp 1
 	jr nz, moving_check_above_right
 	
-	ld a, [player_y]
+	ld a, [new_player_y]
 	;add d
 	cp 8
 	jp z, finish_move
@@ -1065,7 +1075,7 @@ moving_check_above_right:
 	cp 2
 	jr nz, moving_check_above_left
 	
-	ld a, [player_x]
+	ld a, [new_player_x]
 	;add d
 	or a
 	jp z, finish_move
@@ -1093,7 +1103,7 @@ moving_check_above_right:
 	
 	jr moving_check_above_2
 moving_check_above_left:
-	ld a, [player_x]
+	ld a, [new_player_x]
 	;add d
 	cp 9
 	jp z, finish_move
@@ -1146,7 +1156,7 @@ moving_check_above_3:						;For rocketing to jump to
 		jr nz, moving_check_above_3_no_ice	;Only if block isn't ice do we need 
 	pop af									;to consider impassible blocks
 	
-	ld d, $C2
+	ld d, HIGH(ice_slide_space)
 	ld a, [open_slide_spot]
 	ld e, a
 	
@@ -1234,7 +1244,7 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	jp c, start_block_push				;If we've pushed >=1 blocks and now find a bg tile, start push
 	
 	call add_visited					;Check if this curr block is newly visited. If not, cancel push
-	cp $ff
+	cp $FF
 	jp z, reset_ice_and_move
 	
 
@@ -1388,7 +1398,7 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	
 .check_ice:
 	ld a, [open_slide_spot]
-	ld d, $C2
+	ld d, HIGH(ice_slide_space)
 	ld e, a								;curr ice_block_count
 	
 	;push af
@@ -1622,31 +1632,48 @@ start_block_push_end:
 	ld [blocks_pushed], a
 	ld [de], a
 	
-	;ld d, $C2						;!!!!!! ICE stuff we will bring back later
-	;ld a, [open_slide_spot]
-	;ld e, a							;ice_block_count
-;	push bc
-;	push af
-		ld d, $C2
+	push de
+		ld d, HIGH(ice_slide_space)		;!!!!!! ICE stuff we will bring back later
 		ld a, [open_slide_spot]
 		ld e, a							;ice_block_count
+	;push bc
+	;push af
+		;ld d, HIGH(ice_slide_space)
+		;ld a, [open_slide_spot]
+		;ld e, a							;ice_block_count
 		
-;		ld a, [de]
-;		add a
+		;ld a, [de]
+		;add a
 		;dec a						;????
 		;ld d, a
-;		ld b, a
-;	pop af
+		;ld b, a
+	;pop af
 		;sub d
-;		sub b
-;		ld [blocks_pushed_2], a
-;	pop bc
+		;sub b
+		;ld [blocks_pushed_2], a
+	;pop bc
+		ld a, [de]
+	pop de
 	
 	push hl
-		ld hl, block_push_sfx
-		ld a, [de]
 		or a
-		call nz, ice_slide_setup
+		jr z, .no_slide
+		add a
+		ld h, a
+		ld a, [de]
+		sub h
+		ld [de], a
+		cp 1
+		jr nz, .non_ice_present
+		;xor a
+		ld [total_segs_pushed], a
+		;ld [de], a
+
+.non_ice_present:
+		ld hl, block_push_sfx
+		call ice_slide_setup
+		
+.no_slide:
 		call play_noise
 	pop hl
 	call block_push_loop
@@ -1730,7 +1757,7 @@ ice_slide:
 	;or a
 	;ret z
 	ld [slides_count], a
-	ld hl, ICE_MEM_START
+	ld hl, ice_slide_space
 	
 ice_slide_loop:
 	ld a, l
@@ -1838,7 +1865,7 @@ ice_slide_set_slime:
 	call set_block_pal
 	
 ice_slide_end_slide:
-	ld b, $C2
+	ld b, HIGH(ice_slide_space)
 	ld a, [curr_slide_spot]
 	ld c, a
 	xor a
@@ -1858,7 +1885,7 @@ ice_slide_end_slide:
 ice_slide_2:
 	call get_uncovered_tiles
 
-	ld d, $C2
+	ld d, HIGH(ice_slide_space)
 	ld a, [curr_slide_spot]
 	add 7
 	ld e, a					;ice_block_next_line
@@ -1917,7 +1944,7 @@ ice_slide_check:
 ice_slide_next:
 	ld bc, ICE_SLIDE_VARS
 	ld a, [curr_slide_spot]		;Get hl back to first addr of curr slide spot
-	ld h, $C2
+	ld h, HIGH(ice_slide_space)
 	ld l, a
 	add hl, bc
 	jp ice_slide_loop
@@ -1933,7 +1960,13 @@ ice_slide_setup:
 		ld [curr_slide_spot], a
 		
 		call get_ice_block_addr	;Loads hl with curr ice_block_hi/lo
-		ld a, [block_push_next_line]
+		;ld a, [block_push_next_line]
+		ld de, next_line_arr
+		ld a, [curr_push]
+		add e
+		ld e, a
+		ld a, [de]
+		
 		;add a					;Double next line val to make it a full block jump
 		ld b, 0
 		ld c, a
@@ -2043,15 +2076,29 @@ slide_get_dest_loop:
 		dec a
 		inc e			;ice_slide_delay
 		ld [de], a
-		ld a, [block_push_next_line]			;Save the direction the ice is sliding
+		;ld a, [block_push_next_line]			;Save the direction the ice is sliding
 		inc e			;ice_block_next_line
+		push de
+			ld de, next_line_arr
+			ld a, [curr_push]
+			add e
+			ld e, a
+			ld a, [de]
+		pop de
 		ld [de], a
-		ld a, [block_push_adj_tile]
+		;ld a, [block_push_adj_tile]
 		inc e			;ice_block_adj_tile
+		push de
+			ld de, adj_tile_arr
+			ld a, [curr_push]
+			add e
+			ld e, a
+			ld a, [de]
+		pop de
 		ld [de], a
 		
 update_slide_stack:
-		ld h, $C2
+		ld h, HIGH(ice_slide_space)
 		ld a, [open_slide_spot]
 		ld l, a
 		ld bc, ICE_SLIDE_VARS
@@ -2076,7 +2123,7 @@ update_slide_stack_loop:
 ;Loads ice_block_hi/lo into hl
 ;changes de
 get_ice_block_addr:
-	ld d, $C2
+	ld d, HIGH(ice_slide_space)
 	ld a, [curr_slide_spot]
 	ld e, a
 	inc e
@@ -2091,7 +2138,7 @@ get_ice_block_addr:
 ;Loads hl into ice_block_hi/lo
 ;changes de
 set_ice_block_addr:
-	ld d, $C2
+	ld d, HIGH(ice_slide_space)
 	ld a, [curr_slide_spot]
 	ld e, a
 	inc e
@@ -2652,7 +2699,7 @@ get_uncovered_tiles_2:
 		add a					;1=push up, mid, 2=push down, full, etc.
 		ld b, a
 		
-		ld h, $C2
+		ld h, HIGH(ice_slide_space)
 		ld a, [curr_slide_spot]
 		add 5
 		ld l, a					;ice_slide_count

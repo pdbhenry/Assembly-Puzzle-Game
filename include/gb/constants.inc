@@ -137,54 +137,53 @@ RIGHT_PUSH					equ $02
 LEFT_PUSH					equ $FE
 menu_tile_data_size EQU $06B0
 
-SIR_TL						equ $00
-SIR_TR						equ $01
-SIR_BL						equ $02
-SIR_BR						equ $03
-SIR_WALK_BL					equ $04
-SIR_WALK_BR					equ $05
-SIR_SIDE_TL					equ $06
-SIR_SIDE_TR					equ $07
-SIR_SIDE_BL					equ $08
-SIR_SIDE_BR					equ $09
-SIR_SIDE_WALK_TR			equ $0A
-SIR_SIDE_WALK_BR			equ $0B
-SIR_TURN_TL					equ $0C
-SIR_TURN_TR					equ $0D
-SIR_TURN_BL					equ $0E
-SIR_TURN_BR					equ $0F
-SIR_SIDE_TURN_TL			equ $10
-SIR_SIDE_TURN_TR			equ $11
-SIR_SIDE_TURN_BL			equ $12
-SIR_SIDE_TURN_BR			equ $13
-SIR_FIRE_TL					equ $14
-SIR_FIRE_TR					equ $15
-SIR_FIRE_BL					equ $16
-SIR__FIRE_BR				equ $17
-SIR_SIDE_FIRE_TL			equ $18
-SIR_SIDE_FIRE_TR			equ $19
-SIR_SIDE_FIRE_BL			equ $1A
-SIR_SIDE_FIRE_BR			equ $1B
-SIR_EARTH_TL				equ $1C
-SIR_EARTH_TR				equ $1D
-SIR_EARTH_BL				equ $1E
-SIR_EARTH_BR				equ $1F
-SIR_SIDE_EARTH_TL			equ $20
-SIR_SIDE_EARTH_TR			equ $21
-SIR_SIDE_EARTH_BL			equ $22
-SIR_SIDE_EARTH_BR			equ $23
+SIR_TL						equ $08
+SIR_TR						equ $09
+SIR_BL						equ $0A
+SIR_BR						equ $0B
+SIR_WALK_BL					equ $0C
+SIR_WALK_BR					equ $0D
+SIR_SIDE_TL					equ $0E
+SIR_SIDE_TR					equ $0F
+SIR_SIDE_BL					equ $10
+SIR_SIDE_BR					equ $11
+SIR_SIDE_WALK_TR			equ $12
+SIR_SIDE_WALK_BR			equ $13
+SIR_TURN_TL					equ $14
+SIR_TURN_TR					equ $15
+SIR_TURN_BL					equ $16
+SIR_TURN_BR					equ $17
+SIR_SIDE_TURN_TL			equ $18
+SIR_SIDE_TURN_TR			equ $19
+SIR_SIDE_TURN_BL			equ $1A
+SIR_SIDE_TURN_BR			equ $1B
+SIR_CAST_TL					equ $1C
+SIR_CAST_TR					equ $1D
+SIR_CAST_BL					equ $1E
+SIR_CAST_BR					equ $1F
+SIR_SIDE_CAST_TL			equ $20
+SIR_SIDE_CAST_TR			equ $21
+SIR_SIDE_CAST_BL			equ $22
+SIR_SIDE_CAST_BR			equ $23
+SIR_EARTH_TL				equ $24
+SIR_EARTH_TR				equ $25
+SIR_EARTH_BL				equ $26
+SIR_EARTH_BR				equ $27
+SIR_SIDE_EARTH_TL			equ $28
+SIR_SIDE_EARTH_TR			equ $29
+SIR_SIDE_EARTH_BL			equ $2A
+SIR_SIDE_EARTH_BR			equ $2B
 
-SOIL_ANIM_TILE				equ $2C		;First tile val of the four soil anim sprites
-;SOIL_SPR_TR				equ $2D
-;SOIL_SPR_BL				equ $2E
-;SOIL_SPR_BR				equ $2F
+SOIL_ANIM_TILE				equ $00		;First tile val of the four soil anim sprites
 SOIL_SPR_PAL				equ $03
+
+;FRAME_TILE					equ $04
 
 FROST_ANIM_TILE				equ $2C
 FROST_SPR_PAL				equ $01
 
-FLAME_ANIM_TILE				equ $2C
+FLAME_ANIM_TILE				equ $30
 FLAME_SPR_PAL				equ $02
 
-EARTH_ANIM_TILE				equ $2C
+EARTH_ANIM_TILE				equ $34
 EARTH_SPR_PAL				equ $02

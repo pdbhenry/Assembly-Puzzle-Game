@@ -706,6 +706,9 @@ get_level:
 	;Update level map addr
 	add c
 	ld c, a
+	jr nc, .nc
+	inc b
+.nc:
 	ld a, [bc]
 	push af
 		inc bc
