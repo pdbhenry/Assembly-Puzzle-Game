@@ -3,11 +3,15 @@ SECTION "game_load", ROM0
 include "include/gb/constants.inc"
 
 load_game_data::	
+	ld a, $FF
+	ld [moving_arr], a
+	
 	xor a
 	ld [fade_state], a
 	ld [ori], a
 	ld [moving], a
 	ld [moved], a
+	ld [seq_push], a
 	ld [falling], a
 	ld [rocketing], a
 	ld [rocket_push], a

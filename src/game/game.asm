@@ -15,7 +15,8 @@ move_xy:: DW				;Byte 1 is spr_x change per frame and byte 2 is spr_y change
 move_xy_old:: DW				;Holds original movement of input before altered by a ramp
 move_diag_down:: DB			;Holds the value spr_x or spr_y would change by to move diagonally.
 moved:: DB					;If set, we have moved this frame. Used to facilitate smooth movement each frame
-moving_arr:: DS 12
+moving_arr:: DS 20
+seq_push:: DB
 moving_arr_ind:: DB
 dest_tile_addr:: DW 		;Holds the tile address that goblin is actively moving to
 curr_level_addr_hi:: DB
@@ -366,6 +367,10 @@ begin_move_end:
 	ld [moved], a
 	
 move_anim:					;Kinda lame we do this check each time...
+	ld a, [moving_arr]
+	cp $FF
+	jp nz, move_seq
+	
 	ld a, [move_xy]
 	ld b, a
 	ld a, [spr_x]
@@ -685,6 +690,21 @@ pre_moving_check_below:
 	jp nz, rocketing_check		;Skip check below if rocketing up
 	
 moving_check_below_no_call:		;Tells us moving_check_below is not being called
+	ld a, 1
+	ld [falling], a
+	call project_jump_or_fall
+	cp $FE
+	jr nz, .cont
+	xor a
+	ld [falling], a
+	jp reset_move
+.cont:
+	cp $FF
+	jp z, .cont_2
+	xor a
+	ld [falling], a
+	jp end_frame
+.cont_2:
 	ld d, 0						;Otherwise, it stops after finding below block
 ;Checks tile below (according to orientation) and sees if Goblin should fall
 moving_check_below:
@@ -971,6 +991,111 @@ moving_step_stick:
 	inc a									;Get rid of zero flag
 	ret
 
+move_seq:
+	ld a, [moving_arr+1]
+	and %00011111
+	cp %00010000
+	jr nz, .not_first
+;If beginning of move_seq, turn Sirloin into ball
+	call become_ball
+	
+.not_first:
+	ld hl, spr_x
+	ld d, 2
+	ld a, [moving_arr]
+	or a
+	jr nz, .hor
+	ld hl, spr_y
+.hor:
+	ld a, [moving_arr_ind]
+	ld bc, moving_arr
+	add c
+	ld c, a
+	ld a, [bc]
+	cp $C0
+	jr c, .pos
+	
+;Either going up or left
+	add 2
+	ld [bc], a	
+	
+	ld a, [hl]
+	sub d
+	ld [hl], a
+	jr .end
+	
+;Either going down or right
+.pos:
+	sub 2
+	ld [bc], a
+
+	ld a, [hl]
+	add d
+	ld [hl], a
+	
+.end:
+	ld d, 0
+	ld a, [bc]
+	and %00001111
+	cp 8
+	jr nz, .not_half_seq_push
+	ld a, [seq_push]
+	or a
+	jr z, .end_3
+	jp finish_block_push
+	
+.not_half_seq_push:
+	or a
+	jr nz, .end_3
+	ld a, [seq_push]			;If we've reached 0 of an anim and seq_push is set, this is the end.
+	or a
+	jr nz, .seq_finish
+
+	inc c						;If we've reached 0 and the next val in moving_arr is $FF, we've reached the end
+	ld a, [bc]
+	ld d, a
+	cp $FF
+	jr nz, .end_2
+	
+.seq_finish:
+	ld a, $FF
+	ld [moving_arr], a
+	xor a
+	ld [moving], a
+	ld [seq_push], a
+	call unball
+	call update_sprite_pos
+	call get_tile
+	jp moving_check_below_no_call
+	
+.end_2:
+	ld a, [moving_arr_ind]
+	inc a
+	ld [moving_arr_ind], a
+	ld a, [moving_arr]			;If we have finished one anim, we are changing from vert->hor or hor->vert movement
+	inc a						;We are changing first ind of moving_arr from 0->1 or 1->0 to resemble this change.
+	and %00000001
+	ld [moving_arr], a
+	;;;;
+.end_3:
+	call update_sprite_pos
+	ld a, d
+	cp $FE
+	jr nz, .not_seq_push
+	ld a, [moving_arr_ind]
+	inc a
+	ld [moving_arr_ind], a
+	ld [seq_push], a
+	inc c
+	inc c
+	ld a, [bc]
+	ld h, a
+	inc c
+	ld a, [bc]
+	ld l, a
+	jp sbp_skip_save				;start_block_push_skip_save, skipping save because push is saved already
+.not_seq_push:
+	jp end_frame
 	
 ;Resetting ice_block_count of current open slide spot
 ;Now resets earth_making as well
@@ -983,9 +1108,12 @@ reset_ice_and_move:
 	ld [hl], a		;leads into reset_move
 	ld [earth_making], a
 	
+	ld a, $FF
+	ld [moving_arr], a
+	
 	ld a, [rocket_push]
 	or a
-	jr nz, rocketing_check_3
+	jp nz, rocketing_check_3
 
 reset_move:
 	xor a
@@ -1006,14 +1134,12 @@ reset_player_pos:
 moving_check_above:
 	call project_jump_or_fall
 	ld b, 0
-	ld a, [jump_ori]
 	cp $FF
-	ld a, [ori]
 	jr z, .cont
-
 	call get_tile
 	
 .cont:
+	ld a, [jump_ori]
 	cp 0
 	jr nz, moving_check_above_up		;Sort by orientation
 	
@@ -1431,11 +1557,11 @@ check_block_push_2:						;CHECKING KINDS OF BLOCKS BEING PUSHED
 	jp z, reset_ice_and_move
 	
 	xor a
-	ld [de], a				;If we are pushing a non-ice block, res ice count
+	ld [de], a					;If we are pushing a non-ice block, res ice count
 
 check_block_push_3:
 	ld a, [blocks_pushed]
-	or a					;If a is 0, we start blocks_pushed back at 2 rather than incrementing by 1
+	or a						;If a is 0, we start blocks_pushed back at 2 rather than incrementing by 1
 	jr nz, .skip_inc
 	inc a
 .skip_inc:
@@ -1445,6 +1571,11 @@ check_block_push_3:
 	jp check_block_push
 
 start_block_push:
+	ld a, [moving_arr]			;If we have a sequence of anims to play through, save push details for later
+	cp $FF
+	jp nz, save_push
+	
+sbp_skip_save:					;start_block_push_skip_save
 	ld a, [ramping_blocks_ind]
 	or a
 	jr z, .cont
@@ -1669,11 +1800,14 @@ start_block_push_end:
 		ld [total_segs_pushed], a
 		;ld [de], a
 
-.non_ice_present:
-		ld hl, block_push_sfx
+.non_ice_present:						;Skipped to if we're pushing ice and non-ice blocks
+		;ld hl, block_push_sfx
 		call ice_slide_setup
+		jr .play_noise
 		
 .no_slide:
+		ld hl, block_push_sfx
+.play_noise:
 		call play_noise
 	pop hl
 	call block_push_loop
@@ -1690,6 +1824,31 @@ end_blocks_push:
 	ld l, a
 	
 	jp begin_move
+	
+
+;In the case that we need to play a sequence of movements before the push
+save_push:
+	ld b, h
+	ld c, l
+	ld hl, moving_arr+1
+.loop:
+	ldi a, [hl]
+	cp $FF
+	jr nz, .loop
+	
+	dec l
+	dec l
+	ld d, [hl]
+	ld a, $FE
+	ldi [hl], a
+	ld [hl], d
+	inc l
+	ld [hl], b
+	inc l
+	ld [hl], c
+	inc l
+	jp end_frame
+	
 	
 	
 ;A called function
@@ -1952,7 +2111,7 @@ ice_slide_next:
 	
 ;----------------------------------------------------------------------------
 	
-;Destroys hl
+;Destroys hl, de
 ice_slide_setup:
 	push bc
 		
@@ -2543,7 +2702,7 @@ get_front:
 	ret
 
 ;Converts new_player x/y pos into a map address
-;returns with map address stored in hl]
+;returns with map address stored in hl
 ;Destroys a
 get_tile::
 	push bc

@@ -459,6 +459,42 @@ change_pose_2:
 
 ;----------------------------------------------------------------------------
 
+become_ball::
+	ld a, SIR_BALL
+	ld e, 0
+	ld hl, $C402
+	ldi [hl], a
+	ld [hl], e
+	
+	ld a, [spr_y]
+	add 4
+	ld [spr_y], a
+	ld a, [spr_x]
+	add 4
+	ld [spr_x], a
+	
+	ld a, $7F					;Set all the three other Sirloin sprites to a blank tile (transparent)
+	ld hl, $C406
+	ldi [hl], a
+	ld hl, $C40A
+	ldi [hl], a
+	ld hl, $C40E
+	ldi [hl], a
+	ret
+
+
+unball::
+	ld a, [spr_y]
+	sub 4
+	ld [spr_y], a
+	ld a, [spr_x]
+	sub 4
+	ld [spr_x], a
+	ld hl, 0
+	call change_sprite
+	ret
+
+;----------------------------------------------------------------------------
 
 change_goblin_pal::
 	ld b, 1

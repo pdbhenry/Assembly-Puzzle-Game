@@ -173,17 +173,18 @@ SIR_SIDE_EARTH_TL			equ $28
 SIR_SIDE_EARTH_TR			equ $29
 SIR_SIDE_EARTH_BL			equ $2A
 SIR_SIDE_EARTH_BR			equ $2B
+SIR_BALL					equ $2C
 
 SOIL_ANIM_TILE				equ $00		;First tile val of the four soil anim sprites
 SOIL_SPR_PAL				equ $03
 
 ;FRAME_TILE					equ $04
 
-FROST_ANIM_TILE				equ $2C
+FROST_ANIM_TILE				equ $2D
 FROST_SPR_PAL				equ $01
 
-FLAME_ANIM_TILE				equ $30
+FLAME_ANIM_TILE				equ $31
 FLAME_SPR_PAL				equ $02
 
-EARTH_ANIM_TILE				equ $34
+EARTH_ANIM_TILE				equ $35
 EARTH_SPR_PAL				equ $02

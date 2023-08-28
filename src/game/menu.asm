@@ -701,14 +701,17 @@ get_level:
 	push af
 		add l
 		ld l, a
+		jr nc, .nc_hl
+		inc h
+.nc_hl:
 	pop af
 	
 	;Update level map addr
 	add c
 	ld c, a
-	jr nc, .nc
+	jr nc, .nc_bc
 	inc b
-.nc:
+.nc_bc:
 	ld a, [bc]
 	push af
 		inc bc

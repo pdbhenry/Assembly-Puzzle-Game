@@ -726,19 +726,35 @@ project_jump_or_fall::
 	ld a, [new_player_y]
 	ld [temp_2], a
 	
-	push hl
 	ld de, moving_arr
+	ld a, 2
+	ld [moving_arr_ind], a
 	xor a						;Vertical jump is indicated by 0 at first ind of moving_arr
 	ld [de], a
+	
+	push hl
+	
+	ld a, [falling]
+	or a
+	ld a, [ori]
+	jr z, .no_fall
+	
+;If we are falling into ramps, we change the val of ori. If we are falling down, we simulate
+;as if we are actually jumping from up ori. Just so we get in the correct sections .up, .right, .left
+	bit 0, a
+	jr z, .set
+	res 0, a
+	jr .no_fall
+.set:
+	set 0, a
+.no_fall:
+	ld [jump_ori], a 
+	or a
+	jr nz, .up
+	
 	inc e
 	ld a, -16
 	ld [de], a
-	ld a, 2
-	ld [moving_arr_ind], a
-	
-	ld a, [ori]
-	or a
-	jr nz, .up
 	ld bc, -64
 	ld a, RAMP_TL_TILE
 	ld [rampable_3], a					
@@ -751,6 +767,10 @@ project_jump_or_fall::
 .up:
 	cp 1
 	jr nz, .right
+	
+	inc e
+	ld a, 16
+	ld [de], a
 	ld bc, 64
 	ld a, RAMP_BL_TILE
 	ld [rampable_3], a					
@@ -767,25 +787,32 @@ project_jump_or_fall::
 	ld a, 1						;Horizontal jump is indicated by 1 at first ind of moving_arr
 	ld [de], a
 	jr nz, .left
-	ld bc, 2
-	ld a, RAMP_TR_TILE
-	ld [rampable_3], a					
-	ld a, RAMP_BR_TILE	
-	ld [rampable_4], a
-	ld a, [new_player_x]
-	inc a
-	ld [new_player_x], a
-	jr .loop
-.left:
+	
+	inc e
+	ld a, -16
+	ld [de], a
 	ld bc, -2
 	ld a, RAMP_TL_TILE
 	ld [rampable_3], a					
 	ld a, RAMP_BL_TILE	
 	ld [rampable_4], a
+	ld a, [new_player_x]
+	dec a
+	ld [new_player_x], a
+	jr .loop
+.left:
+	inc e
+	ld a, 16
+	ld [de], a
+	ld bc, 2
+	ld a, RAMP_TR_TILE
+	ld [rampable_3], a					
+	ld a, RAMP_BR_TILE	
+	ld [rampable_4], a
 	ld a, 16
 	ld [de], a
 	ld a, [new_player_x]
-	dec a
+	inc a
 	ld [new_player_x], a
 	
 .loop:
@@ -807,6 +834,7 @@ project_jump_or_fall::
 	
 	call turn_dir_helper
 	cp d								;Special case of turn_dir_helper
+	ld a, b
 	jr z, .not_rampable
 	
 	ld a, e
@@ -819,6 +847,9 @@ project_jump_or_fall::
 	sla a
 	ld de, moving_arr
 	push af
+		ld a, [new_player_y]			;While we have a pushed, take a moment to update y temp
+		ld [temp_2], a
+		
 		ld a, [moving_arr_ind]
 		add e
 		ld e, a
@@ -845,6 +876,9 @@ project_jump_or_fall::
 	sra a
 	ld de, moving_arr
 	push af
+		ld a, [new_player_x]			;While we have a pushed, take a moment to update x temp
+		ld [temp], a
+		
 		ld a, [moving_arr_ind]
 		add e
 		ld e, a
@@ -874,8 +908,23 @@ project_jump_or_fall::
 	
 .not_rampable:
 	pop hl
-	;cp PASSABLE_TILE
-	;jr c, .finish_projection
+	cp PASSABLE_TILE
+	jr nc, .not_rampable_2
+	ld a, [falling]
+	or a
+	jr z, .not_rampable_2
+	ld a, [moving_arr_ind]
+	cp 2
+	jr z, .not_rampable_2
+	
+	ld a, [new_player_x]
+	ld [player_x], a
+	ld a, [new_player_y]
+	ld [player_y], a
+	ld a, $FF
+	jr .end_seq
+	
+.not_rampable_2:
 	ld a, [temp]						;Back up our pos by one step, so we're at the last ramp
 	ld [new_player_x], a
 	ld a, [temp_2]
@@ -883,9 +932,18 @@ project_jump_or_fall::
 	
 	ld a, [moving_arr_ind]
 	cp 2
-	jr nz, .finish_projection
-	ld a, $FF							;If no ramping happened, ld push_ori with FF to show
-	ld [jump_ori], a					;that we are not jumping out of ramps
+	ld a, $FF							;If no ramping happened, ld a with FF to show
+	jr z, .no_seq						;that we are not jumping out of ramps
+			
+.end_seq:			
+	inc e
+	ld [de], a
+	ld a, 1
+	ld [moving_arr_ind], a									
+	jr .finish_projection
+
+.no_seq:
+	ld [moving_arr], a
 .finish_projection:
 	ret
 	
